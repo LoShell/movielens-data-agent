@@ -56,3 +56,13 @@ chmod +x mvnw scripts/*.sh
 时间越界的记录进入 `quarantine`；精确重复只保留一条；同一业务键下存在矛盾值时，
 所有相关记录均隔离，避免系统自行猜测正确值。结果写入 `/movielens/cleaned/clean-v1`，
 处置统计写入 `/movielens/reports/scan-001/cleaning.json`。
+
+## 使用相同口径复检清洗结果
+
+```bash
+./scripts/run-clean-quality-scan.sh scan-001 clean-v1 quality-rules-v1
+```
+
+脚本使用 UTF-8 读取清洗产物，依次执行基础质量扫描和全表/跨表扫描，报告分别写入
+`clean-raw-quality.json` 与 `clean-relational-quality.json`。原始数据与清洗数据使用相同规则版本、
+相同时间范围和相同计数逻辑，结果可直接用于五维评分对比。

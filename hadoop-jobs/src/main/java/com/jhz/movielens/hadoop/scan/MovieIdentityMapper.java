@@ -15,7 +15,7 @@ public final class MovieIdentityMapper extends Mapper<LongWritable, Text, Text, 
 
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-        ParseResult<MovieRecord> result = parser.parse(MovieLensEncoding.decodeIso88591(value));
+        ParseResult<MovieRecord> result = parser.parse(MovieLensEncoding.decode(value, context.getConfiguration()));
         if (!result.isValid()) {
             return;
         }

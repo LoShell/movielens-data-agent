@@ -40,7 +40,7 @@ public final class RelationalRatingMapper extends Mapper<LongWritable, Text, Tex
 
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-        ParseResult<RatingRecord> result = parser.parse(MovieLensEncoding.decodeIso88591(value));
+        ParseResult<RatingRecord> result = parser.parse(MovieLensEncoding.decode(value, context.getConfiguration()));
         if (!result.isValid()) {
             return;
         }

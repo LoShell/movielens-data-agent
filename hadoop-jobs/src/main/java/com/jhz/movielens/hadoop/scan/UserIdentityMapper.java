@@ -15,7 +15,7 @@ public final class UserIdentityMapper extends Mapper<LongWritable, Text, Text, T
 
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-        ParseResult<UserRecord> result = parser.parse(MovieLensEncoding.decodeIso88591(value));
+        ParseResult<UserRecord> result = parser.parse(MovieLensEncoding.decode(value, context.getConfiguration()));
         if (!result.isValid()) {
             return;
         }

@@ -24,7 +24,7 @@ abstract class AbstractQualityMapper<T>
         context.getCounter(QualityCounterNames.RECORD_GROUP,
                 QualityCounterNames.record(dataset, "total")).increment(1);
 
-        ParseResult<T> result = parser().parse(MovieLensEncoding.decodeIso88591(value));
+        ParseResult<T> result = parser().parse(MovieLensEncoding.decode(value, context.getConfiguration()));
         if (result.isParsed()) {
             context.getCounter(QualityCounterNames.RECORD_GROUP,
                     QualityCounterNames.record(dataset, "parsed")).increment(1);
