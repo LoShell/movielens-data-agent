@@ -45,3 +45,14 @@ chmod +x mvnw scripts/*.sh
 `MOVIELENS_MIN_TIMESTAMP` 和 `MOVIELENS_MAX_TIMESTAMP` 显式覆盖。
 
 这两个扫描报告仍不是最终五维评价报告；最终得分由后续评分作业统一计算。
+
+## 运行清洗
+
+```bash
+./scripts/run-cleaning.sh scan-001 raw-v1 clean-v1 quality-rules-v1
+```
+
+清洗按 `users -> movies -> ratings` 的顺序执行三个 Hadoop 作业。格式或取值非法、断链、
+时间越界的记录进入 `quarantine`；精确重复只保留一条；同一业务键下存在矛盾值时，
+所有相关记录均隔离，避免系统自行猜测正确值。结果写入 `/movielens/cleaned/clean-v1`，
+处置统计写入 `/movielens/reports/scan-001/cleaning.json`。
