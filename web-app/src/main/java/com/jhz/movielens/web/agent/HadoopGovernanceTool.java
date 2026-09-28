@@ -25,11 +25,10 @@ import java.util.regex.Pattern;
 @Component
 public class HadoopGovernanceTool implements Tool {
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9._-]{1,100}");
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final PipelineProperties properties;
 
-    public HadoopGovernanceTool(ObjectMapper objectMapper, PipelineProperties properties) {
-        this.objectMapper = objectMapper;
+    public HadoopGovernanceTool(PipelineProperties properties) {
         this.properties = properties;
     }
 
@@ -74,6 +73,11 @@ public class HadoopGovernanceTool implements Tool {
             data.put("reportPath", reportRoot + "/five-dimension-quality.json");
             data.set("quality", quality);
             data.set("cleaning", cleaning);
+            String cleanRoot = "/movielens/cleaned/" + outputVersion;
+            data.set("cleanRatingSamples", objectMapper.valueToTree(readHdfsLines(
+                    cleanRoot + "/ratings/clean/part-r-00000", workingDirectory, 6)));
+            data.set("quarantineRatingSamples", objectMapper.valueToTree(readHdfsLines(
+                    cleanRoot + "/ratings/quarantine/part-r-00000", workingDirectory, 6)));
             return ToolResult.success("Hadoop pipeline completed successfully.", data);
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure("INVALID_INPUT", exception.getMessage());
@@ -88,6 +92,27 @@ public class HadoopGovernanceTool implements Tool {
             throw new IOException("Unable to read HDFS report " + path + ": " + result.output());
         }
         return objectMapper.readTree(result.output());
+    }
+
+    private static List<String> readHdfsLines(String path, Path workingDirectory, int limit) throws Exception {
+        ProcessBuilder builder = new ProcessBuilder("hdfs", "dfs", "-cat", path);
+        builder.directory(workingDirectory.toFile());
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        List<String> lines = new ArrayList<>(limit);
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while (lines.size() < limit && (line = reader.readLine()) != null) {
+                lines.add(line);
+            }
+        } finally {
+            process.destroy();
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+            }
+        }
+        return lines;
     }
 
     private static String requiredIdentifier(JsonNode input, String field) {

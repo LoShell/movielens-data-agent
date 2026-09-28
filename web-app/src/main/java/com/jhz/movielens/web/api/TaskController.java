@@ -1,5 +1,6 @@
 package com.jhz.movielens.web.api;
 
+import com.jhz.movielens.web.agent.ReportQuestionAnswerer;
 import com.jhz.movielens.web.task.GovernanceTaskService;
 import com.jhz.movielens.web.task.TaskSnapshot;
 import jakarta.validation.Valid;
@@ -17,9 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/tasks")
 public class TaskController {
     private final GovernanceTaskService taskService;
+    private final ReportQuestionAnswerer questionAnswerer;
 
-    public TaskController(GovernanceTaskService taskService) {
+    public TaskController(GovernanceTaskService taskService, ReportQuestionAnswerer questionAnswerer) {
         this.taskService = taskService;
+        this.questionAnswerer = questionAnswerer;
     }
 
     @PostMapping
@@ -34,5 +37,12 @@ public class TaskController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在");
         }
         return task;
+    }
+
+    @PostMapping("/{taskId}/questions")
+    public QuestionResponse ask(@PathVariable String taskId, @Valid @RequestBody QuestionRequest request) {
+        TaskSnapshot task = get(taskId);
+        String question = request.question().trim();
+        return new QuestionResponse(taskId, question, questionAnswerer.answer(task, question));
     }
 }
