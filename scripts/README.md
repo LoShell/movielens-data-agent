@@ -77,3 +77,12 @@ chmod +x mvnw scripts/*.sh
 Up-to-date、Consistent 得分和变化。默认 `T1=2002-01-01T00:00:00Z`、
 `T2=2003-01-01T00:00:00Z`，后续迭代统一采用：训练集 `timestamp <= T1`，
 验证集 `T1 < timestamp <= T2`，测试集 `timestamp > T2`。
+
+## Agent 一次调用完整流程
+
+```bash
+./scripts/run-agent-pipeline.sh agent-demo-001 raw-v1 clean-agent-demo-001 quality-rules-v1
+```
+
+该脚本是 Agent 唯一允许调用的 Hadoop 入口，按基础扫描、跨表扫描、清洗、清洗后复检、
+五维评分的固定顺序执行。任务标识和输出版本不可覆盖，任一阶段失败时立即停止并返回错误。

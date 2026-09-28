@@ -6,3 +6,11 @@ spring:
     name: movielens-data-agent
   thymeleaf:
     cache: false
+
+movielens:
+  pipeline:
+    script: ./scripts/run-agent-pipeline.sh
+    working-directory: .
+    input-version: raw-v1
+    rules-version: quality-rules-v1
+    timeout: 20m

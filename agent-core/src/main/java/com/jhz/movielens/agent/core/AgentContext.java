@@ -10,6 +10,7 @@ public final class AgentContext {
     private final String taskId;
     private final String userRequest;
     private final List<AgentMessage> history = new ArrayList<>();
+    private final List<ToolObservation> toolObservations = new ArrayList<>();
 
     public AgentContext(String userRequest) {
         this(UUID.randomUUID().toString(), userRequest);
@@ -44,6 +45,7 @@ public final class AgentContext {
     }
 
     public void addToolObservation(String toolName, ToolResult result) {
+        toolObservations.add(new ToolObservation(toolName, result));
         String content = "code=%s; success=%s; message=%s; data=%s".formatted(
                 result.code(), result.success(), result.message(), result.data());
         history.add(new AgentMessage(AgentMessage.Role.TOOL, toolName, content));
@@ -51,5 +53,9 @@ public final class AgentContext {
 
     public List<AgentMessage> getHistory() {
         return List.copyOf(history);
+    }
+
+    public List<ToolObservation> getToolObservations() {
+        return List.copyOf(toolObservations);
     }
 }
