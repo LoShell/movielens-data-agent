@@ -29,4 +29,19 @@ chmod +x mvnw scripts/*.sh
 /movielens/reports/scan-001/raw-quality.json
 ```
 
-当前扫描报告覆盖字段解析、必填项、数值范围和枚举合法性。唯一性、跨表引用一致性、时间边界及最终五维评分由后续作业补充，不能把当前报告误称为完整五维评价报告。
+当前扫描报告覆盖字段解析、必填项、数值范围和枚举合法性。
+
+## 运行全表与跨表质量扫描
+
+使用与基础扫描相同的任务标识：
+
+```bash
+./scripts/run-relational-quality-scan.sh scan-001 raw-v1 quality-rules-v1
+```
+
+报告写入 `/movielens/reports/scan-001/relational-quality.json`，覆盖精确重复、同一业务键冲突、
+评分引用不存在的用户或电影，以及评分时间戳是否超出 MovieLens 1M 文档覆盖范围。
+默认闭区间为 `956703932..1046454590`，其他数据版本可通过环境变量
+`MOVIELENS_MIN_TIMESTAMP` 和 `MOVIELENS_MAX_TIMESTAMP` 显式覆盖。
+
+这两个扫描报告仍不是最终五维评价报告；最终得分由后续评分作业统一计算。
