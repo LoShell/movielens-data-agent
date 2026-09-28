@@ -1,0 +1,29 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Maven build output and local caches
+target/
+**/target/
+.m2/
+
+# Runtime output
+*.log
+logs/
+artifacts/
+
+# Local secrets and overrides
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+
+# Local datasets and generated data
+data/raw/
+data/processed/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
