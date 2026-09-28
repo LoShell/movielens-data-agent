@@ -66,3 +66,14 @@ chmod +x mvnw scripts/*.sh
 脚本使用 UTF-8 读取清洗产物，依次执行基础质量扫描和全表/跨表扫描，报告分别写入
 `clean-raw-quality.json` 与 `clean-relational-quality.json`。原始数据与清洗数据使用相同规则版本、
 相同时间范围和相同计数逻辑，结果可直接用于五维评分对比。
+
+## 生成五维评分与时间边界
+
+```bash
+./scripts/run-quality-score.sh scan-001 raw-v1 clean-v1 quality-rules-v1
+```
+
+评分工具读取四份 Hadoop 扫描报告，使用固定公式生成清洗前后 Accurate、Complete、Unique、
+Up-to-date、Consistent 得分和变化。默认 `T1=2002-01-01T00:00:00Z`、
+`T2=2003-01-01T00:00:00Z`，后续迭代统一采用：训练集 `timestamp <= T1`，
+验证集 `T1 < timestamp <= T2`，测试集 `timestamp > T2`。
