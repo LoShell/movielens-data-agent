@@ -6,6 +6,8 @@
 
 > 本项目不使用占位数据或模拟分数。任务未完成、工具失败或报告缺失时，页面会明确显示未完成或失败状态。
 
+迭代一的实验过程、结果分析和截图位置见 [迭代一实验报告.md](迭代一实验报告.md)。
+
 ## 1. 当前实现
 
 - 使用真实 LLM 完成 `Plan → Action → Observation → Reflection` Agent 循环。
@@ -225,7 +227,14 @@ score = max(0, 100 × (1 - defectCount / denominator))
 
 ## 9. 已验证结果
 
-任务 `scan-20260928-01` 已在 Ubuntu 的真实 HDFS/YARN/MapReduce 环境完成全流程验证：
+任务 `agent-20260929-124232-bfc440f2` 已由 Agent 在 Ubuntu 的真实 HDFS/YARN/MapReduce 环境完成全流程验证，总耗时约 11 分 55 秒：
+
+```text
+输入版本：raw-v1
+输出版本：clean-agent-20260929-124232-bfc440f2
+规则版本：quality-rules-v1
+最终报告：/movielens/reports/agent-20260929-124232-bfc440f2/five-dimension-quality.json
+```
 
 | 维度 | 清洗前 | 清洗后 | 变化 |
 | --- | ---: | ---: | ---: |
