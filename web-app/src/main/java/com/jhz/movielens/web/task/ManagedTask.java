@@ -29,7 +29,7 @@ final class ManagedTask {
 
     void running() {
         status = TaskStatus.RUNNING;
-        stage = "Agent 正在调用 Hadoop 清洗与评分工具";
+        stage = "Agent 正在理解请求并规划工具调用";
         startedAt = Instant.now();
     }
 

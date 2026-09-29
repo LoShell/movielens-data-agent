@@ -42,7 +42,7 @@ public final class AgentLoop {
                 return AgentResponse.failed("LLM returned an empty or unsupported response.");
             }
 
-            context.addAssistantMessage("STEP %d: %s".formatted(step, response.getMessage()));
+            context.addAssistantMessage(formatAssistantMessage(step, response));
 
             if (response.isTerminal()) {
                 return response;
@@ -82,5 +82,19 @@ public final class AgentLoop {
         } catch (RuntimeException exception) {
             return ToolResult.failure("TOOL_EXECUTION_FAILED", exception.getMessage());
         }
+    }
+
+    private static String formatAssistantMessage(int step, AgentResponse response) {
+        StringBuilder message = new StringBuilder("STEP ").append(step)
+                .append(": type=").append(response.getType())
+                .append("; message=").append(response.getMessage());
+        if (response.getToolCall() != null) {
+            message.append("; tool=").append(response.getToolCall().getTool())
+                    .append("; input=").append(response.getToolCall().getInput());
+        }
+        if (response.getSummary() != null) {
+            message.append("; summary=").append(response.getSummary());
+        }
+        return message.toString();
     }
 }

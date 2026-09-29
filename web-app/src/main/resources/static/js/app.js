@@ -165,7 +165,8 @@ function renderTask(task) {
     setMetadata(task);
     setStatus(task.status, task.stage);
     if (task.status === "QUEUED" || task.status === "RUNNING") {
-        elements.agentMessage.textContent = "Agent 已接受请求，正在调用 Hadoop 执行扫描、清洗、复检和评分。任务完成前不会生成占位分数。";
+        elements.agentMessage.textContent = "Agent 已接受请求，正在理解目标并从已注册工具中规划下一步。"
+            + "只有真实工具执行并返回报告后才会展示结果。";
     } else if (task.status === "FAILED") {
         elements.agentMessage.textContent = `任务失败：${task.error || "未知错误"}`;
     } else if (task.status === "SUCCEEDED") {
@@ -187,9 +188,9 @@ function renderCompleted(task) {
     const quarantined = sumAction(cleaning.actions, "invalidQuarantined")
         + sumAction(cleaning.actions, "duplicatesRemoved")
         + sumAction(cleaning.actions, "conflictsQuarantined");
-    elements.agentMessage.textContent = `Hadoop 治理任务已完成：清洗版本保留 ${formatNumber(clean)} 条记录，`
+    elements.agentMessage.textContent = task.summary || (`Hadoop 治理任务已完成：清洗版本保留 ${formatNumber(clean)} 条记录，`
         + `另有 ${formatNumber(quarantined)} 条因规则异常、重复或冲突进入隔离区。`
-        + "五维得分均来自清洗前后同口径扫描；100 分仅表示通过当前规则，不代表现实真实性已被外部核验。";
+        + "五维得分均来自清洗前后同口径扫描；100 分仅表示通过当前规则，不代表现实真实性已被外部核验。");
     elements.resultArea.classList.remove("hidden");
     elements.questionArea.classList.remove("hidden");
     document.querySelector("#reportPath").textContent = result.reportPath || "HDFS 报告已生成";

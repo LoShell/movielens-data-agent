@@ -3,6 +3,7 @@ package com.jhz.movielens.web.agent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jhz.movielens.agent.protocol.ToolResult;
 import com.jhz.movielens.agent.tool.Tool;
 import com.jhz.movielens.web.config.PipelineProperties;
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
 
 @Component
 public class HadoopGovernanceTool implements Tool {
+    public static final String TOOL_NAME = "run_full_governance";
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9._-]{1,100}");
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PipelineProperties properties;
@@ -34,12 +36,29 @@ public class HadoopGovernanceTool implements Tool {
 
     @Override
     public String name() {
-        return WorkflowPlanner.TOOL_NAME;
+        return TOOL_NAME;
     }
 
     @Override
     public String description() {
-        return "Runs the fixed MovieLens Hadoop scan-clean-rescan-score pipeline and returns HDFS reports.";
+        return "Run the registered MovieLens iteration-1 Hadoop workflow: raw quality scan, relational scan, "
+                + "cleaning/quarantine, clean-data recheck and five-dimension scoring. Use only for a supported "
+                + "full governance request and only with identifiers from Runtime context.";
+    }
+
+    @Override
+    public JsonNode inputSchema() {
+        ObjectNode schema = JsonNodeFactory.instance.objectNode();
+        schema.put("type", "object");
+        ObjectNode propertiesNode = schema.putObject("properties");
+        identifierProperty(propertiesNode, "taskId", "Exact taskId from Runtime context.");
+        identifierProperty(propertiesNode, "inputVersion", "Exact registeredInputVersion from Runtime context.");
+        identifierProperty(propertiesNode, "outputVersion", "Exact reservedOutputVersion from Runtime context.");
+        identifierProperty(propertiesNode, "rulesVersion", "Exact registeredRulesVersion from Runtime context.");
+        schema.putArray("required")
+                .add("taskId").add("inputVersion").add("outputVersion").add("rulesVersion");
+        schema.put("additionalProperties", false);
+        return schema;
     }
 
     @Override
@@ -49,6 +68,18 @@ public class HadoopGovernanceTool implements Tool {
             String inputVersion = requiredIdentifier(input, "inputVersion");
             String outputVersion = requiredIdentifier(input, "outputVersion");
             String rulesVersion = requiredIdentifier(input, "rulesVersion");
+            if (!properties.getInputVersion().equals(inputVersion)) {
+                return ToolResult.failure("UNREGISTERED_INPUT_VERSION",
+                        "Input version is not registered: " + inputVersion);
+            }
+            if (!properties.getRulesVersion().equals(rulesVersion)) {
+                return ToolResult.failure("UNREGISTERED_RULES_VERSION",
+                        "Rules version is not registered: " + rulesVersion);
+            }
+            if (!outputVersion.equals("clean-" + taskId)) {
+                return ToolResult.failure("INVALID_OUTPUT_VERSION",
+                        "Output version must match the reserved task output version.");
+            }
             Path workingDirectory = Path.of(properties.getWorkingDirectory()).toAbsolutePath().normalize();
             Path script = workingDirectory.resolve(properties.getScript()).normalize();
             if (!script.startsWith(workingDirectory)) {
@@ -121,6 +152,13 @@ public class HadoopGovernanceTool implements Tool {
             throw new IllegalArgumentException("Invalid " + field + ".");
         }
         return value;
+    }
+
+    private static void identifierProperty(ObjectNode propertiesNode, String name, String description) {
+        propertiesNode.putObject(name)
+                .put("type", "string")
+                .put("description", description)
+                .put("pattern", "^[A-Za-z0-9._-]{1,100}$");
     }
 
     private static CommandResult run(List<String> command, Path workingDirectory, Duration timeout) throws Exception {
