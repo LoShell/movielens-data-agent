@@ -1,8 +1,7 @@
 package com.jhz.movielens.web.task;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
 import java.time.Instant;
+import java.util.Map;
 
 final class ManagedTask {
     private final String taskId;
@@ -17,7 +16,7 @@ final class ManagedTask {
     private volatile String error = "";
     private volatile Instant startedAt;
     private volatile Instant finishedAt;
-    private volatile JsonNode result;
+    private volatile Map<String, Object> result;
 
     ManagedTask(String taskId, String prompt, String inputVersion, String outputVersion, String rulesVersion) {
         this.taskId = taskId;
@@ -33,7 +32,7 @@ final class ManagedTask {
         startedAt = Instant.now();
     }
 
-    void succeeded(String summary, JsonNode result) {
+    void succeeded(String summary, Map<String, Object> result) {
         this.status = TaskStatus.SUCCEEDED;
         this.stage = "已完成";
         this.summary = summary;

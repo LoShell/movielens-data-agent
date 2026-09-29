@@ -1,6 +1,5 @@
 package com.jhz.movielens.web.task;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.jhz.movielens.agent.core.AgentContext;
 import com.jhz.movielens.agent.core.AgentLoop;
 import com.jhz.movielens.agent.llm.LlmClient;
@@ -8,6 +7,7 @@ import com.jhz.movielens.agent.protocol.AgentResponse;
 import com.jhz.movielens.agent.protocol.AgentResponseType;
 import com.jhz.movielens.agent.tool.ToolRegistry;
 import com.jhz.movielens.web.config.LlmProperties;
+import com.jhz.movielens.web.config.JsonTreeConverter;
 import com.jhz.movielens.web.config.PipelineProperties;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
@@ -30,13 +30,16 @@ public class GovernanceTaskService {
     private final LlmClient llmClient;
     private final PipelineProperties properties;
     private final LlmProperties llmProperties;
+    private final JsonTreeConverter jsonTreeConverter;
 
     public GovernanceTaskService(ToolRegistry toolRegistry, LlmClient llmClient,
-                                 PipelineProperties properties, LlmProperties llmProperties) {
+                                 PipelineProperties properties, LlmProperties llmProperties,
+                                 JsonTreeConverter jsonTreeConverter) {
         this.toolRegistry = toolRegistry;
         this.llmClient = llmClient;
         this.properties = properties;
         this.llmProperties = llmProperties;
+        this.jsonTreeConverter = jsonTreeConverter;
     }
 
     public TaskSnapshot submit(String prompt) {
@@ -84,7 +87,7 @@ public class GovernanceTaskService {
                         + finalObservation.result().message());
                 return;
             }
-            JsonNode result = finalObservation.result().data();
+            Map<String, Object> result = jsonTreeConverter.toWebMap(finalObservation.result().data());
             task.succeeded(response.getSummary(), result);
         } catch (RuntimeException exception) {
             task.failed(exception.getMessage());

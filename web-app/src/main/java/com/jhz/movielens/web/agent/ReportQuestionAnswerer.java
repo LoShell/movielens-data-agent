@@ -1,6 +1,7 @@
 package com.jhz.movielens.web.agent;
 
 import com.jhz.movielens.agent.llm.TextLlmClient;
+import com.jhz.movielens.web.config.JsonTreeConverter;
 import com.jhz.movielens.web.task.TaskSnapshot;
 import com.jhz.movielens.web.task.TaskStatus;
 import org.springframework.stereotype.Component;
@@ -8,9 +9,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReportQuestionAnswerer {
     private final TextLlmClient llmClient;
+    private final JsonTreeConverter jsonTreeConverter;
 
-    public ReportQuestionAnswerer(TextLlmClient llmClient) {
+    public ReportQuestionAnswerer(TextLlmClient llmClient, JsonTreeConverter jsonTreeConverter) {
         this.llmClient = llmClient;
+        this.jsonTreeConverter = jsonTreeConverter;
     }
 
     public String answer(TaskSnapshot task, String question) {
@@ -37,7 +40,7 @@ public class ReportQuestionAnswerer {
                 用户追问：
                 %s
                 """.formatted(task.taskId(), task.inputVersion(), task.outputVersion(),
-                task.rulesVersion(), task.result(), question);
+                task.rulesVersion(), jsonTreeConverter.toJson(task.result()), question);
         return llmClient.complete(systemPrompt, userPrompt);
     }
 }
