@@ -34,7 +34,7 @@ const elements = {
     resultEmpty: document.querySelector("#resultEmpty"),
     resultContent: document.querySelector("#resultContent"),
     resultSummary: document.querySelector("#resultSummary"),
-    agentMessage: document.querySelector("#agentMessage p"),
+    agentMessage: document.querySelector("#agentMessage .agent-copy"),
     conversation: document.querySelector("#conversation"),
     trace: document.querySelector("#executionTrace"),
     consoleBody: document.querySelector("#consoleBody"),
@@ -67,6 +67,100 @@ function formatDuration(start, end) {
     const seconds = Math.max(0, Math.floor((new Date(end || Date.now()) - new Date(start)) / 1000));
     const minutes = Math.floor(seconds / 60);
     return minutes > 0 ? `${minutes}分${String(seconds % 60).padStart(2, "0")}秒` : `${seconds}秒`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
+
+function renderInlineMarkdown(value) {
+    const codeFragments = [];
+    let rendered = escapeHtml(value).replace(/`([^`\n]+)`/g, (_, code) => {
+        const index = codeFragments.push(code) - 1;
+        return `\uE000${index}\uE001`;
+    });
+    rendered = rendered
+        .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+    return rendered.replace(/\uE000(\d+)\uE001/g,
+        (_, index) => `<code>${codeFragments[Number(index)]}</code>`);
+}
+
+function renderMarkdown(value) {
+    const lines = String(value ?? "").replaceAll("\r\n", "\n").split("\n");
+    const output = [];
+    let listType = "";
+    let codeLines = null;
+
+    const closeList = () => {
+        if (listType) output.push(`</${listType}>`);
+        listType = "";
+    };
+
+    lines.forEach(line => {
+        if (line.trim().startsWith("```")) {
+            closeList();
+            if (codeLines === null) {
+                codeLines = [];
+            } else {
+                output.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+                codeLines = null;
+            }
+            return;
+        }
+        if (codeLines !== null) {
+            codeLines.push(line);
+            return;
+        }
+
+        const heading = line.match(/^\s*(#{1,4})\s+(.+)$/);
+        const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        const quote = line.match(/^\s*>\s?(.*)$/);
+
+        if (heading) {
+            closeList();
+            const level = heading[1].length;
+            output.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+        } else if (unordered || ordered) {
+            const nextType = unordered ? "ul" : "ol";
+            if (listType !== nextType) {
+                closeList();
+                listType = nextType;
+                output.push(`<${listType}>`);
+            }
+            output.push(`<li>${renderInlineMarkdown((unordered || ordered)[1])}</li>`);
+        } else if (quote) {
+            closeList();
+            output.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+        } else if (!line.trim()) {
+            closeList();
+        } else {
+            closeList();
+            output.push(`<p>${renderInlineMarkdown(line)}</p>`);
+        }
+    });
+
+    closeList();
+    if (codeLines !== null) {
+        output.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    }
+    return output.join("");
+}
+
+function setAgentMessage(text, markdown = false) {
+    if (markdown) {
+        elements.agentMessage.classList.add("markdown-body");
+        elements.agentMessage.innerHTML = renderMarkdown(text);
+    } else {
+        elements.agentMessage.classList.remove("markdown-body");
+        elements.agentMessage.textContent = text;
+    }
 }
 
 function updateCharacterCount() {
@@ -211,7 +305,7 @@ async function createTask() {
         schedulePoll();
     } catch (error) {
         renderStatus({status: "FAILED", stage: "任务创建失败", progress: 0, steps: defaultSteps});
-        elements.agentMessage.textContent = `任务创建失败：${error.message}`;
+        setAgentMessage(`任务创建失败：${error.message}`);
         showToast(error.message);
     }
 }
@@ -245,12 +339,12 @@ function renderTask(task) {
     renderStatus(task);
     renderTrace(task.events || []);
     if (task.status === "QUEUED" || task.status === "RUNNING") {
-        elements.agentMessage.textContent = task.stage || "Agent 正在处理任务。";
+        setAgentMessage(task.stage || "Agent 正在处理任务。");
     } else if (task.status === "FAILED") {
-        elements.agentMessage.textContent = `任务失败：${task.error || "未知错误"}`;
+        setAgentMessage(`任务失败：${task.error || "未知错误"}`);
         enableQuestions(false);
     } else if (task.status === "SUCCEEDED") {
-        elements.agentMessage.textContent = task.summary || "任务已完成，结果来自实际工具报告。";
+        setAgentMessage(task.summary || "任务已完成，结果来自实际工具报告。", true);
         renderCompleted(task);
         enableQuestions(true);
     }
@@ -412,10 +506,15 @@ async function askQuestion(event) {
 }
 
 function appendConversation(role, text) {
-    const paragraph = document.createElement("p");
-    paragraph.className = role;
-    paragraph.textContent = text;
-    elements.conversation.append(paragraph);
+    const message = document.createElement("article");
+    message.className = `message ${role}`;
+    if (role === "agent") {
+        message.classList.add("markdown-body");
+        message.innerHTML = renderMarkdown(text);
+    } else {
+        message.textContent = text;
+    }
+    elements.conversation.append(message);
     selectConsoleTab("dialogue");
     elements.consoleBody.scrollTop = elements.consoleBody.scrollHeight;
 }

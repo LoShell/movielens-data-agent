@@ -44,7 +44,7 @@
             <section class="prompt-card card">
                 <div class="prompt-icon">✦</div>
                 <label class="sr-only" for="promptInput">任务需求</label>
-                <textarea id="promptInput" maxlength="2000" rows="2">请使用默认规则清洗 MovieLens 1M，评估清洗前后的 Accurate、Complete、Unique、Up-to-date、Consistent 五个维度，并说明处理了哪些问题、还有哪些问题无法解决。</textarea>
+                <textarea id="promptInput" maxlength="2000" rows="2" spellcheck="false">请使用默认规则清洗 MovieLens 1M，评估清洗前后的 Accurate、Complete、Unique、Up-to-date、Consistent 五个维度，并说明处理了哪些问题、还有哪些问题无法解决。</textarea>
                 <div class="prompt-actions">
                     <span id="charCount">0/2000</span>
                     <button id="startButton" class="primary-button"><span>▶</span>执行任务</button>
@@ -82,7 +82,7 @@
                     <div id="dialoguePanel" class="console-panel">
                         <div id="agentMessage" class="agent-message">
                             <span class="agent-avatar">✦</span>
-                            <p>输入任务后，我会选择已注册工具，并在这里说明执行结果。</p>
+                            <div class="agent-copy">输入任务后，我会选择已注册工具，并在这里说明执行结果。</div>
                         </div>
                         <div id="conversation" class="conversation"></div>
                     </div>
@@ -93,7 +93,7 @@
                     </div>
                 </div>
                 <form id="questionForm" class="console-input">
-                    <input id="questionInput" maxlength="500" disabled placeholder="任务完成后可围绕报告继续提问">
+                    <input id="questionInput" maxlength="500" disabled spellcheck="false" placeholder="任务完成后可围绕报告继续提问">
                     <button type="submit" disabled>发送</button>
                 </form>
             </section>
