@@ -8,6 +8,8 @@
 
 迭代一的实验过程、结果分析和截图位置见 [迭代一实验报告.md](迭代一实验报告.md)。
 
+仓库链接：`https://github.com/LoShell/movielens-data-agent`
+
 ## 1. 当前实现
 
 - 使用真实 LLM 完成 `Plan → Action → Observation → Reflection` Agent 循环。
