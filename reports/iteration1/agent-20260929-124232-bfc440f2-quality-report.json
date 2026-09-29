@@ -1,0 +1,164 @@
+{
+  "taskId": "agent-20260929-124232-bfc440f2",
+  "inputVersion": "raw-v1",
+  "outputVersion": "clean-agent-20260929-124232-bfc440f2",
+  "rulesVersion": "quality-rules-v1",
+  "reportPath": "/movielens/reports/agent-20260929-124232-bfc440f2/five-dimension-quality.json",
+  "quality": {
+    "schemaVersion": "1.0",
+    "taskId": "agent-20260929-124232-bfc440f2",
+    "inputVersion": "raw-v1",
+    "outputVersion": "clean-agent-20260929-124232-bfc440f2",
+    "rulesVersion": "quality-rules-v1",
+    "status": "SUCCEEDED",
+    "generatedAt": "2026-09-29T12:53:48.029113866Z",
+    "timeBoundaries": {
+      "T1": {
+        "epochSeconds": 1009843200,
+        "utc": "2002-01-01T00:00:00Z",
+        "usage": "training: timestamp <= T1"
+      },
+      "T2": {
+        "epochSeconds": 1041379200,
+        "utc": "2003-01-01T00:00:00Z",
+        "usage": "validation: T1 < timestamp <= T2; test: timestamp > T2"
+      }
+    },
+    "dimensions": {
+      "Accurate": {
+        "before": {
+          "score": 95.96,
+          "defectCount": 46985,
+          "denominator": 1161652
+        },
+        "after": {
+          "score": 100,
+          "defectCount": 0,
+          "denominator": 904550
+        },
+        "delta": 4.04
+      },
+      "Complete": {
+        "before": {
+          "score": 98.82,
+          "defectCount": 13652,
+          "denominator": 1161652
+        },
+        "after": {
+          "score": 100,
+          "defectCount": 0,
+          "denominator": 904550
+        },
+        "delta": 1.18
+      },
+      "Unique": {
+        "before": {
+          "score": 94.97,
+          "defectCount": 54690,
+          "denominator": 1087508
+        },
+        "after": {
+          "score": 100,
+          "defectCount": 0,
+          "denominator": 904550
+        },
+        "delta": 5.03
+      },
+      "Up-to-date": {
+        "before": {
+          "score": 97.78,
+          "defectCount": 25506,
+          "denominator": 1150241
+        },
+        "after": {
+          "score": 100,
+          "defectCount": 0,
+          "denominator": 894993
+        },
+        "delta": 2.22
+      },
+      "Consistent": {
+        "before": {
+          "score": 94.12,
+          "defectCount": 68348,
+          "denominator": 1161652
+        },
+        "after": {
+          "score": 100,
+          "defectCount": 0,
+          "denominator": 904550
+        },
+        "delta": 5.88
+      }
+    },
+    "method": {
+      "formula": "score=max(0,100*(1-defectCount/denominator))",
+      "Accurate": "Constraint conformance for types, ranges and known categories; no external truth validation.",
+      "Complete": "Required-field and empty-line defect rate over all records.",
+      "Unique": "Exact duplicate and conflicting business-key variant rate over relationally checked records.",
+      "Up-to-date": "Timestamp validity against the documented MovieLens historical coverage, not present-day freshness.",
+      "Consistent": "Structural, categorical, cross-table reference and business-key conflict conformance."
+    },
+    "limitations": [
+      "Correct format does not prove that voluntary user attributes or ratings are factually true.",
+      "Historical MovieLens data is assessed against its own documented period and should not be described as current data.",
+      "Quarantined records are excluded from the clean version rather than claimed as repaired."
+    ]
+  },
+  "cleaning": {
+    "schemaVersion": "1.0",
+    "taskId": "agent-20260929-124232-bfc440f2",
+    "inputVersion": "raw-v1",
+    "outputVersion": "clean-agent-20260929-124232-bfc440f2",
+    "rulesVersion": "quality-rules-v1",
+    "status": "SUCCEEDED",
+    "startedAt": "2026-09-29T12:46:43.570642723Z",
+    "finishedAt": "2026-09-29T12:49:42.635395413Z",
+    "outputRoot": "/movielens/cleaned/clean-agent-20260929-124232-bfc440f2",
+    "expectedTimestampRange": {
+      "minInclusive": 956703932,
+      "maxInclusive": 1046454590
+    },
+    "jobs": {
+      "users": "job_1790602455214_0028",
+      "movies": "job_1790602455214_0029",
+      "ratings": "job_1790602455214_0030"
+    },
+    "actions": {
+      "users": {
+        "cleanWritten": 5895,
+        "invalidQuarantined": 499,
+        "duplicatesRemoved": 118,
+        "conflictsQuarantined": 434
+      },
+      "movies": {
+        "cleanWritten": 3662,
+        "invalidQuarantined": 128,
+        "duplicatesRemoved": 117,
+        "conflictsQuarantined": 558
+      },
+      "ratings": {
+        "cleanWritten": 894993,
+        "invalidQuarantined": 219004,
+        "duplicatesRemoved": 0,
+        "conflictsQuarantined": 36244
+      }
+    }
+  },
+  "cleanRatingSamples": [
+    "1000::1023::5::975041651",
+    "1000::1029::3::975041859",
+    "1000::1036::4::975040964",
+    "1000::1104::5::975042421",
+    "1000::1196::3::975040841",
+    "1000::1198::5::975040841"
+  ],
+  "quarantineRatingSamples": [
+    "MISSING_CLEAN_MOVIE_REFERENCE\t3830::2762::4::965932448",
+    "MISSING_CLEAN_MOVIE_REFERENCE\t4980::357::4::962599124",
+    "MISSING_CLEAN_USER_REFERENCE\t1717::1256::5::993455443",
+    "INVALID_INTEGER\t26::2100::3.5::978141053",
+    "MISSING_CLEAN_USER_REFERENCE\t752::1641::5::976222018",
+    "MISSING_CLEAN_USER_REFERENCE\t1012625::784::4::978154139"
+  ]
+}
