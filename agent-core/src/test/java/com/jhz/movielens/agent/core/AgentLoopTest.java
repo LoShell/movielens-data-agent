@@ -11,6 +11,7 @@ import com.jhz.movielens.agent.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 
@@ -38,6 +39,31 @@ class AgentLoopTest {
         assertTrue(context.getHistory().stream().anyMatch(message ->
                 message.role() == AgentMessage.Role.TOOL
                         && message.content().contains("hello")));
+    }
+
+    @Test
+    void publishesPlanningActionObservationAndFinalEvents() {
+        ToolRegistry registry = new ToolRegistry();
+        registry.register(new EchoTool());
+        Queue<AgentResponse> responses = new ArrayDeque<>(List.of(
+                AgentResponse.toolCall("Run echo.", new ToolCall(
+                        "echo", JsonNodeFactory.instance.objectNode().put("value", "hello"))),
+                AgentResponse.done("Finished.")));
+        List<AgentEvent> events = new ArrayList<>();
+
+        AgentResponse response = new AgentLoop(ignored -> responses.remove(), registry, 3, events::add)
+                .run(new AgentContext("task-events", "Test progress events."));
+
+        assertEquals(AgentResponseType.DONE, response.getType());
+        assertEquals(List.of(
+                        AgentEvent.Type.PLAN,
+                        AgentEvent.Type.ACTION,
+                        AgentEvent.Type.OBSERVATION,
+                        AgentEvent.Type.PLAN,
+                        AgentEvent.Type.FINAL),
+                events.stream().map(AgentEvent::type).toList());
+        assertEquals("echo", events.get(1).toolName());
+        assertEquals(100, events.get(events.size() - 1).progress());
     }
 
     @Test

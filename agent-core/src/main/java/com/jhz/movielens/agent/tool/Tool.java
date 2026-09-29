@@ -16,4 +16,8 @@ public interface Tool {
     }
 
     ToolResult execute(JsonNode input);
+
+    default ToolResult execute(JsonNode input, ToolExecutionContext context) {
+        return execute(input);
+    }
 }

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jhz.movielens.agent.protocol.ToolResult;
 import com.jhz.movielens.agent.tool.Tool;
+import com.jhz.movielens.agent.tool.ToolExecutionContext;
 import com.jhz.movielens.web.config.PipelineProperties;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,8 @@ import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
@@ -63,6 +66,11 @@ public class HadoopGovernanceTool implements Tool {
 
     @Override
     public ToolResult execute(JsonNode input) {
+        return execute(input, new ToolExecutionContext(null));
+    }
+
+    @Override
+    public ToolResult execute(JsonNode input, ToolExecutionContext executionContext) {
         try {
             String taskId = requiredIdentifier(input, "taskId");
             String inputVersion = requiredIdentifier(input, "inputVersion");
@@ -86,9 +94,10 @@ public class HadoopGovernanceTool implements Tool {
                 return ToolResult.failure("INVALID_SCRIPT_PATH", "Pipeline script must stay inside the project directory.");
             }
 
+            PipelineProgressParser progressParser = new PipelineProgressParser(executionContext, name());
             CommandResult pipeline = run(List.of(
                     "bash", script.toString(), taskId, inputVersion, outputVersion, rulesVersion),
-                    workingDirectory, properties.getTimeout());
+                    workingDirectory, properties.getTimeout(), progressParser::accept);
             if (pipeline.exitCode() != 0) {
                 return ToolResult.failure("HADOOP_PIPELINE_FAILED", pipeline.output());
             }
@@ -162,11 +171,17 @@ public class HadoopGovernanceTool implements Tool {
     }
 
     private static CommandResult run(List<String> command, Path workingDirectory, Duration timeout) throws Exception {
+        return run(command, workingDirectory, timeout, ignored -> {
+        });
+    }
+
+    private static CommandResult run(List<String> command, Path workingDirectory, Duration timeout,
+                                     Consumer<String> lineConsumer) throws Exception {
         ProcessBuilder builder = new ProcessBuilder(new ArrayList<>(command));
         builder.directory(workingDirectory.toFile());
         builder.redirectErrorStream(true);
         Process process = builder.start();
-        CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> readTail(process));
+        CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> readTail(process, lineConsumer));
         boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
         if (!finished) {
             process.destroyForcibly();
@@ -176,12 +191,13 @@ public class HadoopGovernanceTool implements Tool {
         return new CommandResult(process.exitValue(), output.join());
     }
 
-    private static String readTail(Process process) {
+    private static String readTail(Process process, Consumer<String> lineConsumer) {
         Deque<String> lines = new ArrayDeque<>();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
+                lineConsumer.accept(line);
                 if (lines.size() == 400) {
                     lines.removeFirst();
                 }
@@ -194,5 +210,74 @@ public class HadoopGovernanceTool implements Tool {
     }
 
     private record CommandResult(int exitCode, String output) {
+    }
+
+    private static final class PipelineProgressParser {
+        private static final Pattern HEADER = Pattern.compile("^\\[(\\d)/5]\\s+.*$");
+        private static final Pattern JOB = Pattern.compile(".*Running job:\\s+(job_[0-9_]+).*$");
+        private static final Pattern MAP_REDUCE = Pattern.compile(".*map\\s+(\\d+)%\\s+reduce\\s+(\\d+)%.*");
+        private static final String[] STAGE_CODES = {
+                "", "RAW_QUALITY_SCAN", "RELATIONAL_CHECK", "CLEANING",
+                "CLEAN_VALIDATION", "QUALITY_SCORING"
+        };
+        private static final String[] STAGE_LABELS = {
+                "", "正在扫描原始数据质量", "正在检查跨表关系与唯一性", "正在清洗并隔离异常记录",
+                "正在复检清洗后的数据", "正在计算五维质量得分"
+        };
+        private static final int[] START_PROGRESS = {0, 10, 25, 40, 68, 82};
+        private static final int[] END_PROGRESS = {0, 25, 40, 68, 82, 93};
+
+        private final ToolExecutionContext context;
+        private final String toolName;
+        private int stageIndex;
+        private int lastBucket = -1;
+        private String currentJob = "";
+
+        private PipelineProgressParser(ToolExecutionContext context, String toolName) {
+            this.context = context;
+            this.toolName = toolName;
+        }
+
+        private void accept(String line) {
+            Matcher header = HEADER.matcher(line);
+            if (header.matches()) {
+                stageIndex = Integer.parseInt(header.group(1));
+                lastBucket = -1;
+                currentJob = "";
+                report(STAGE_LABELS[stageIndex], START_PROGRESS[stageIndex]);
+                return;
+            }
+            if (stageIndex == 0) {
+                return;
+            }
+            Matcher job = JOB.matcher(line);
+            if (job.matches()) {
+                currentJob = job.group(1);
+                lastBucket = -1;
+                report(STAGE_LABELS[stageIndex] + " · " + currentJob, START_PROGRESS[stageIndex]);
+                return;
+            }
+            Matcher mapReduce = MAP_REDUCE.matcher(line);
+            if (mapReduce.matches()) {
+                int map = Integer.parseInt(mapReduce.group(1));
+                int reduce = Integer.parseInt(mapReduce.group(2));
+                int stagePercent = (map + reduce) / 2;
+                int bucket = stagePercent / 10;
+                if (bucket == lastBucket) {
+                    return;
+                }
+                lastBucket = bucket;
+                int overall = START_PROGRESS[stageIndex]
+                        + (END_PROGRESS[stageIndex] - START_PROGRESS[stageIndex]) * stagePercent / 100;
+                String detail = STAGE_LABELS[stageIndex]
+                        + (currentJob.isBlank() ? "" : " · " + currentJob)
+                        + " · Map " + map + "% / Reduce " + reduce + "%";
+                report(detail, overall);
+            }
+        }
+
+        private void report(String message, int progress) {
+            context.progress(STAGE_CODES[stageIndex], message, toolName, progress);
+        }
     }
 }

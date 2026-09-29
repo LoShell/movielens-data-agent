@@ -70,7 +70,8 @@ public class GovernanceTaskService {
             AgentLoop loop = new AgentLoop(
                     llmClient,
                     toolRegistry,
-                    llmProperties.getMaxSteps());
+                    llmProperties.getMaxSteps(),
+                    task::onAgentEvent);
             AgentResponse response = loop.run(context);
             if (response.getType() != AgentResponseType.DONE) {
                 task.failed(response.getSummary() == null ? response.getMessage() : response.getSummary());

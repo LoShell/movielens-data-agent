@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -46,7 +47,8 @@ class MovieLensAgentApplicationTest {
                 "cleaning", Map.of("actions", Map.of("ratings",
                         Map.of("cleanWritten", 894993))));
         TaskSnapshot snapshot = new TaskSnapshot("task-1", "test", "raw-v1", "clean-v1",
-                "quality-rules-v1", TaskStatus.SUCCEEDED, "已完成", "done", "",
+                "quality-rules-v1", TaskStatus.SUCCEEDED, "COMPLETED", "已完成",
+                "run_full_governance", 100, Instant.now(), List.of(), List.of(), "done", "",
                 Instant.now(), Instant.now(), Instant.now(), report);
 
         var serialized = webObjectMapper.readTree(webObjectMapper.writeValueAsString(snapshot));

@@ -6,6 +6,17 @@ const dimensions = [
     ["Consistent", "一致性"]
 ];
 
+const defaultSteps = [
+    ["AGENT_PLANNING", "理解请求"],
+    ["RAW_QUALITY_SCAN", "质量扫描"],
+    ["RELATIONAL_CHECK", "跨表检查"],
+    ["CLEANING", "数据清洗"],
+    ["CLEAN_VALIDATION", "复检验证"],
+    ["QUALITY_SCORING", "五维评分"],
+    ["AGENT_SUMMARIZING", "结果解释"],
+    ["COMPLETED", "完成"]
+].map(([code, label]) => ({code, label, status: "PENDING"}));
+
 const elements = {
     prompt: document.querySelector("#promptInput"),
     charCount: document.querySelector("#charCount"),
@@ -13,9 +24,22 @@ const elements = {
     badge: document.querySelector("#statusBadge"),
     runningStrip: document.querySelector("#runningStrip"),
     stage: document.querySelector("#stageText"),
-    resultArea: document.querySelector("#resultArea"),
-    questionArea: document.querySelector("#questionArea"),
+    stepper: document.querySelector("#stepper"),
+    progressBar: document.querySelector("#progressBar"),
+    progressValue: document.querySelector("#progressValue"),
+    selectedTool: document.querySelector("#selectedTool"),
+    elapsedTime: document.querySelector("#elapsedTime"),
+    lastUpdated: document.querySelector("#lastUpdated"),
+    openResults: document.querySelector("#openResultsButton"),
+    resultEmpty: document.querySelector("#resultEmpty"),
+    resultContent: document.querySelector("#resultContent"),
+    resultSummary: document.querySelector("#resultSummary"),
     agentMessage: document.querySelector("#agentMessage p"),
+    conversation: document.querySelector("#conversation"),
+    trace: document.querySelector("#executionTrace"),
+    consoleBody: document.querySelector("#consoleBody"),
+    questionInput: document.querySelector("#questionInput"),
+    questionButton: document.querySelector("#questionForm button"),
     dialog: document.querySelector("#reportDialog"),
     reportJson: document.querySelector("#reportJson"),
     toast: document.querySelector("#toast")
@@ -23,52 +47,52 @@ const elements = {
 
 let currentTask = null;
 let pollTimer = null;
+let elapsedTimer = null;
 
 function formatNumber(value) {
     return Number(value || 0).toLocaleString("zh-CN");
 }
 
 function formatDate(iso) {
+    return iso ? iso.slice(0, 10) : "—";
+}
+
+function formatClock(iso) {
     if (!iso) return "—";
-    return iso.slice(0, 10);
+    return new Date(iso).toLocaleTimeString("zh-CN", {hour12: false});
+}
+
+function formatDuration(start, end) {
+    if (!start) return "—";
+    const seconds = Math.max(0, Math.floor((new Date(end || Date.now()) - new Date(start)) / 1000));
+    const minutes = Math.floor(seconds / 60);
+    return minutes > 0 ? `${minutes}分${String(seconds % 60).padStart(2, "0")}秒` : `${seconds}秒`;
 }
 
 function updateCharacterCount() {
     elements.charCount.textContent = `${elements.prompt.value.length}/2000`;
 }
 
-function renderScoreChart(quality) {
-    const chart = document.querySelector("#scoreChart");
-    chart.replaceChildren();
-    dimensions.forEach(([key, chinese]) => {
-        const value = quality?.dimensions?.[key];
-        const before = Number(value?.before?.score || 0);
-        const after = Number(value?.after?.score || 0);
-
-        const column = document.createElement("div");
-        column.className = "score-column";
-        const bars = document.createElement("div");
-        bars.className = "bars";
-        bars.append(createBar("before", before, Boolean(value)), createBar("after", after, Boolean(value)));
-        const label = document.createElement("div");
-        label.className = "score-label";
-        label.textContent = key;
-        const small = document.createElement("small");
-        small.textContent = chinese;
-        label.append(small);
-        column.append(bars, label);
-        chart.append(column);
+function switchView(view, updateHash = true) {
+    const selected = view === "results" ? "results" : "agent";
+    document.querySelectorAll("[data-view-panel]").forEach(panel => {
+        panel.classList.toggle("hidden", panel.dataset.viewPanel !== selected);
     });
+    document.querySelectorAll(".nav-item[data-view]").forEach(item => {
+        item.classList.toggle("active", item.dataset.view === selected);
+    });
+    if (updateHash && location.hash !== `#${selected}`) history.replaceState(null, "", `#${selected}`);
+    window.scrollTo({top: 0, behavior: "smooth"});
 }
 
-function createBar(type, score, available) {
-    const bar = document.createElement("div");
-    bar.className = `bar ${type}`;
-    bar.style.height = `${available ? Math.max(4, score) : 4}%`;
-    const value = document.createElement("em");
-    value.textContent = available ? score.toFixed(2) : "—";
-    bar.append(value);
-    return bar;
+function selectConsoleTab(tab) {
+    const trace = tab === "trace";
+    document.querySelector("#dialoguePanel").classList.toggle("hidden", trace);
+    document.querySelector("#tracePanel").classList.toggle("hidden", !trace);
+    document.querySelectorAll(".console-tab").forEach(button => {
+        button.classList.toggle("active", button.dataset.consoleTab === tab);
+    });
+    elements.consoleBody.scrollTop = elements.consoleBody.scrollHeight;
 }
 
 function setMetadata(task) {
@@ -78,52 +102,102 @@ function setMetadata(task) {
     document.querySelector("#taskId").textContent = task?.taskId || "—";
 }
 
-function setStatus(status, stage = "") {
-    const steps = [...document.querySelectorAll(".step")];
-    steps.forEach(step => step.className = "step");
+function renderSteps(steps = defaultSteps) {
+    elements.stepper.replaceChildren();
+    steps.forEach((step, index) => {
+        const item = document.createElement("div");
+        item.className = `step ${String(step.status || "PENDING").toLowerCase()}`;
+        const number = document.createElement("i");
+        number.textContent = String(index + 1);
+        const label = document.createElement("span");
+        label.textContent = step.label;
+        item.append(number, label);
+        elements.stepper.append(item);
+    });
+}
+
+function renderStatus(task) {
+    const status = task?.status || "IDLE";
+    const progress = Number(task?.progress || 0);
     elements.badge.className = "status-badge";
-    elements.runningStrip.classList.add("hidden");
+    elements.runningStrip.classList.toggle("hidden", status !== "QUEUED" && status !== "RUNNING");
+    elements.openResults.classList.toggle("hidden", status !== "SUCCEEDED");
+    elements.start.disabled = status === "QUEUED" || status === "RUNNING";
 
     if (status === "QUEUED" || status === "RUNNING") {
         elements.badge.classList.add("running");
         elements.badge.textContent = status === "QUEUED" ? "排队中" : "执行中";
-        steps[0].classList.add("done");
-        for (let index = 1; index < 6; index++) steps[index].classList.add("running");
-        elements.runningStrip.classList.remove("hidden");
-        elements.stage.textContent = stage || "Agent 正在调用 Hadoop 完整治理流程";
-        elements.start.disabled = true;
-        return;
-    }
-    if (status === "SUCCEEDED") {
+    } else if (status === "SUCCEEDED") {
         elements.badge.classList.add("success");
         elements.badge.textContent = "已完成";
-        steps.forEach(step => step.classList.add("done"));
-        elements.start.disabled = false;
-        return;
-    }
-    if (status === "FAILED") {
+    } else if (status === "FAILED") {
         elements.badge.classList.add("failure");
         elements.badge.textContent = "执行失败";
-        steps[0].classList.add("done");
-        steps[1].classList.add("failed");
-        elements.start.disabled = false;
+    } else {
+        elements.badge.classList.add("idle");
+        elements.badge.textContent = "等待开始";
+    }
+
+    elements.stage.textContent = task?.stage || "等待任务";
+    elements.progressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+    elements.progressValue.textContent = `${progress}%`;
+    elements.selectedTool.textContent = task?.selectedTool || "—";
+    elements.lastUpdated.textContent = formatClock(task?.updatedAt);
+    renderSteps(task?.steps?.length ? task.steps : defaultSteps);
+    updateElapsed();
+}
+
+function updateElapsed() {
+    elements.elapsedTime.textContent = currentTask
+        ? formatDuration(currentTask.startedAt, currentTask.finishedAt)
+        : "—";
+}
+
+function renderTrace(events = []) {
+    const nearBottom = elements.consoleBody.scrollHeight - elements.consoleBody.scrollTop
+        - elements.consoleBody.clientHeight < 50;
+    elements.trace.replaceChildren();
+    if (!events.length) {
+        const empty = document.createElement("p");
+        empty.className = "console-empty";
+        empty.textContent = "任务执行后显示规划、工具调用与观察结果。";
+        elements.trace.append(empty);
         return;
     }
-    elements.badge.classList.add("idle");
-    elements.badge.textContent = "等待开始";
-    steps[0].classList.add("current");
-    elements.start.disabled = false;
+    events.forEach(event => {
+        const item = document.createElement("article");
+        item.className = `trace-entry ${String(event.type || "").toLowerCase()}`;
+        const marker = document.createElement("i");
+        marker.textContent = traceIcon(event.type);
+        const content = document.createElement("div");
+        const heading = document.createElement("strong");
+        heading.textContent = traceTitle(event.type, event.toolName);
+        const message = document.createElement("p");
+        message.textContent = event.message || event.stageCode;
+        const meta = document.createElement("small");
+        meta.textContent = `${formatClock(event.timestamp)} · ${event.progress}%`;
+        content.append(heading, message, meta);
+        item.append(marker, content);
+        elements.trace.append(item);
+    });
+    if (nearBottom) elements.consoleBody.scrollTop = elements.consoleBody.scrollHeight;
+}
+
+function traceIcon(type) {
+    return ({PLAN: "P", ACTION: "A", PROGRESS: "↻", OBSERVATION: "O", FINAL: "✓", ERROR: "!"})[type] || "·";
+}
+
+function traceTitle(type, toolName) {
+    const title = ({PLAN: "规划", ACTION: "调用工具", PROGRESS: "执行进度", OBSERVATION: "工具结果", FINAL: "完成", ERROR: "错误"})[type] || "事件";
+    return toolName ? `${title} · ${toolName}` : title;
 }
 
 async function createTask() {
     const prompt = elements.prompt.value.trim();
-    if (!prompt) {
-        showToast("请输入数据治理需求");
-        return;
-    }
+    if (!prompt) return showToast("请输入任务需求");
     clearTimeout(pollTimer);
-    resetResults();
-    setStatus("QUEUED", "正在创建 Agent 任务");
+    resetTaskView();
+    renderStatus({status: "QUEUED", stage: "正在创建 Agent 任务", progress: 0, steps: defaultSteps});
     try {
         const response = await fetch("/api/tasks", {
             method: "POST",
@@ -136,7 +210,7 @@ async function createTask() {
         renderTask(currentTask);
         schedulePoll();
     } catch (error) {
-        setStatus("FAILED");
+        renderStatus({status: "FAILED", stage: "任务创建失败", progress: 0, steps: defaultSteps});
         elements.agentMessage.textContent = `任务创建失败：${error.message}`;
         showToast(error.message);
     }
@@ -146,6 +220,11 @@ async function pollTask() {
     if (!currentTask?.taskId) return;
     try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(currentTask.taskId)}`);
+        if (response.status === 404) {
+            localStorage.removeItem("movielens.currentTask");
+            currentTask = null;
+            return;
+        }
         if (!response.ok) throw new Error(await errorMessage(response));
         currentTask = await response.json();
         renderTask(currentTask);
@@ -156,45 +235,80 @@ async function pollTask() {
     }
 }
 
-function schedulePoll(delay = 3500) {
+function schedulePoll(delay = 2500) {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(pollTask, delay);
 }
 
 function renderTask(task) {
     setMetadata(task);
-    setStatus(task.status, task.stage);
+    renderStatus(task);
+    renderTrace(task.events || []);
     if (task.status === "QUEUED" || task.status === "RUNNING") {
-        elements.agentMessage.textContent = "Agent 已接受请求，正在理解目标并从已注册工具中规划下一步。"
-            + "只有真实工具执行并返回报告后才会展示结果。";
+        elements.agentMessage.textContent = task.stage || "Agent 正在处理任务。";
     } else if (task.status === "FAILED") {
         elements.agentMessage.textContent = `任务失败：${task.error || "未知错误"}`;
+        enableQuestions(false);
     } else if (task.status === "SUCCEEDED") {
+        elements.agentMessage.textContent = task.summary || "任务已完成，结果来自实际工具报告。";
         renderCompleted(task);
+        enableQuestions(true);
     }
 }
 
 function renderCompleted(task) {
     const result = task.result || {};
-    const quality = result.quality || {};
-    const cleaning = result.cleaning || {};
+    const quality = result.quality;
+    const cleaning = result.cleaning;
+    if (!quality || !cleaning) {
+        elements.resultEmpty.classList.remove("hidden");
+        elements.resultContent.classList.add("hidden");
+        showToast("任务完成，但报告结构不完整");
+        return;
+    }
     renderScoreChart(quality);
     renderActions(cleaning.actions || {});
     renderBoundaries(quality.timeBoundaries || {});
     renderSamples(result.cleanRatingSamples || [], result.quarantineRatingSamples || []);
     renderLimitations(quality.limitations || []);
-
-    const clean = sumAction(cleaning.actions, "cleanWritten");
-    const quarantined = sumAction(cleaning.actions, "invalidQuarantined")
-        + sumAction(cleaning.actions, "duplicatesRemoved")
-        + sumAction(cleaning.actions, "conflictsQuarantined");
-    elements.agentMessage.textContent = task.summary || (`Hadoop 治理任务已完成：清洗版本保留 ${formatNumber(clean)} 条记录，`
-        + `另有 ${formatNumber(quarantined)} 条因规则异常、重复或冲突进入隔离区。`
-        + "五维得分均来自清洗前后同口径扫描；100 分仅表示通过当前规则，不代表现实真实性已被外部核验。");
-    elements.resultArea.classList.remove("hidden");
-    elements.questionArea.classList.remove("hidden");
+    elements.resultSummary.textContent = task.summary || "任务已完成。";
     document.querySelector("#reportPath").textContent = result.reportPath || "HDFS 报告已生成";
-    elements.reportJson.textContent = JSON.stringify({quality, cleaning}, null, 2);
+    elements.reportJson.textContent = JSON.stringify(result, null, 2);
+    elements.resultEmpty.classList.add("hidden");
+    elements.resultContent.classList.remove("hidden");
+}
+
+function renderScoreChart(quality) {
+    const chart = document.querySelector("#scoreChart");
+    chart.replaceChildren();
+    dimensions.forEach(([key, chinese]) => {
+        const value = quality?.dimensions?.[key];
+        const column = document.createElement("div");
+        column.className = "score-column";
+        const bars = document.createElement("div");
+        bars.className = "bars";
+        bars.append(createBar("before", value?.before?.score), createBar("after", value?.after?.score));
+        const label = document.createElement("div");
+        label.className = "score-label";
+        label.textContent = key;
+        const small = document.createElement("small");
+        small.textContent = chinese;
+        label.append(small);
+        column.append(bars, label);
+        chart.append(column);
+    });
+}
+
+function createBar(type, rawScore) {
+    const available = rawScore !== undefined && rawScore !== null;
+    const score = Number(rawScore || 0);
+    const bar = document.createElement("div");
+    bar.className = `bar ${type}`;
+    bar.style.height = `${available ? Math.max(4, score) : 4}%`;
+    const value = document.createElement("em");
+    value.textContent = available ? score.toFixed(2) : "—";
+    bar.append(value);
+    return bar;
 }
 
 function renderActions(actions) {
@@ -205,8 +319,7 @@ function renderActions(actions) {
 }
 
 function sumAction(actions, name) {
-    if (!actions) return 0;
-    return ["ratings", "users", "movies"].reduce((sum, dataset) => sum + Number(actions[dataset]?.[name] || 0), 0);
+    return ["ratings", "users", "movies"].reduce((sum, dataset) => sum + Number(actions?.[dataset]?.[name] || 0), 0);
 }
 
 function renderBoundaries(boundaries) {
@@ -219,13 +332,9 @@ function renderSamples(clean, quarantine) {
     const quarantineBody = document.querySelector("#quarantineRows");
     cleanBody.replaceChildren();
     quarantineBody.replaceChildren();
-
-    clean.forEach(line => {
-        const fields = line.split("::");
-        cleanBody.append(tableRow(fields.slice(0, 4)));
-    });
+    clean.forEach(line => cleanBody.append(tableRow(String(line).split("::").slice(0, 4))));
     quarantine.forEach(line => {
-        const [reason = "UNKNOWN", raw = ""] = line.split("\t", 2);
+        const [reason = "UNKNOWN", raw = ""] = String(line).split("\t", 2);
         quarantineBody.append(tableRow([reason, ...raw.split("::").slice(0, 4)]));
     });
     if (!clean.length) cleanBody.append(emptyRow(4));
@@ -248,7 +357,7 @@ function emptyRow(columns) {
     const cell = document.createElement("td");
     cell.className = "empty-row";
     cell.colSpan = columns;
-    cell.textContent = "暂无可展示样例";
+    cell.textContent = "暂无样例";
     row.append(cell);
     return row;
 }
@@ -263,22 +372,29 @@ function renderLimitations(limitations) {
     });
 }
 
-function resetResults() {
-    renderScoreChart(null);
-    ["cleanCount", "invalidCount", "duplicateCount", "conflictCount", "t1Value", "t2Value"]
-        .forEach(id => document.querySelector(`#${id}`).textContent = "—");
-    elements.resultArea.classList.add("hidden");
-    elements.questionArea.classList.add("hidden");
-    document.querySelector("#conversation").replaceChildren();
+function resetTaskView() {
+    elements.resultEmpty.classList.remove("hidden");
+    elements.resultContent.classList.add("hidden");
+    elements.conversation.replaceChildren();
+    renderTrace([]);
+    enableQuestions(false);
+}
+
+function enableQuestions(enabled) {
+    elements.questionInput.disabled = !enabled;
+    elements.questionButton.disabled = !enabled;
+    elements.questionInput.placeholder = enabled
+        ? "围绕本次报告继续提问"
+        : "任务完成后可围绕报告继续提问";
 }
 
 async function askQuestion(event) {
     event.preventDefault();
-    const input = document.querySelector("#questionInput");
-    const question = input.value.trim();
+    const question = elements.questionInput.value.trim();
     if (!question || !currentTask?.taskId) return;
     appendConversation("user", question);
-    input.value = "";
+    elements.questionInput.value = "";
+    elements.questionButton.disabled = true;
     try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(currentTask.taskId)}/questions`, {
             method: "POST",
@@ -290,6 +406,8 @@ async function askQuestion(event) {
         appendConversation("agent", answer.answer);
     } catch (error) {
         appendConversation("agent", `追问失败：${error.message}`);
+    } finally {
+        elements.questionButton.disabled = false;
     }
 }
 
@@ -297,13 +415,13 @@ function appendConversation(role, text) {
     const paragraph = document.createElement("p");
     paragraph.className = role;
     paragraph.textContent = text;
-    const conversation = document.querySelector("#conversation");
-    conversation.append(paragraph);
-    conversation.scrollTop = conversation.scrollHeight;
+    elements.conversation.append(paragraph);
+    selectConsoleTab("dialogue");
+    elements.consoleBody.scrollTop = elements.consoleBody.scrollHeight;
 }
 
 function downloadReport() {
-    if (!currentTask?.result) return showToast("暂无可下载报告");
+    if (!currentTask?.result) return showToast("暂无报告");
     const blob = new Blob([JSON.stringify(currentTask.result, null, 2)], {type: "application/json"});
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -330,16 +448,28 @@ function showToast(message) {
 elements.prompt.addEventListener("input", updateCharacterCount);
 elements.start.addEventListener("click", createTask);
 document.querySelector("#questionForm").addEventListener("submit", askQuestion);
+document.querySelectorAll(".nav-item[data-view]").forEach(item => item.addEventListener("click", event => {
+    event.preventDefault();
+    switchView(item.dataset.view);
+}));
+document.querySelectorAll(".console-tab").forEach(button => button.addEventListener("click", () => {
+    selectConsoleTab(button.dataset.consoleTab);
+}));
+elements.openResults.addEventListener("click", () => switchView("results"));
+document.querySelector("#backToAgentButton").addEventListener("click", () => switchView("agent"));
 document.querySelector("#viewReportButton").addEventListener("click", () => {
     if (!currentTask?.result) return showToast("暂无报告");
     elements.dialog.showModal();
 });
 document.querySelector("#downloadReportButton").addEventListener("click", downloadReport);
 document.querySelector("#closeDialog").addEventListener("click", () => elements.dialog.close());
+window.addEventListener("hashchange", () => switchView(location.hash.slice(1), false));
 
 updateCharacterCount();
-renderScoreChart(null);
-setStatus("IDLE");
+renderSteps(defaultSteps);
+renderStatus(null);
+switchView(location.hash.slice(1), false);
+elapsedTimer = setInterval(updateElapsed, 1000);
 
 const rememberedTask = localStorage.getItem("movielens.currentTask");
 if (rememberedTask) {
