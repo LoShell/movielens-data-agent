@@ -32,6 +32,11 @@ public final class PromptBuilder {
                 - Reject unrelated, unsafe, or unsupported requests with FAILED without calling a tool.
                 - Keep message to a short decision rationale; do not expose private chain-of-thought.
                 - A failed tool result must be explained or followed by a safe corrective action.
+                - For an iteration-2 classification request without a named algorithm, call both registered classification tools with the same user and movie IDs before DONE.
+                - For an iteration-2 clustering request without a named algorithm, call both registered clustering tools with the same user selection and parameters before DONE.
+                - For an iteration-2 dimensionality-reduction request without a named algorithm, call both registered reduction tools with the same user selection and parameters before DONE.
+                - If the user specifies one registered algorithm, call that algorithm's tool only. If required target IDs are missing, request them through FAILED instead of inventing IDs.
+                - Summarize each observed algorithm separately; do not infer a prediction, group, coordinate, metric, or version that a tool did not return.
 
                 Available tools (name, description, JSON input schema):
                 %s

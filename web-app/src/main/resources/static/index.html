@@ -41,14 +41,46 @@
                 <p>描述目标，Agent 将选择已注册工具并返回真实执行结果。</p>
             </div>
 
-            <section class="prompt-card card">
-                <div class="prompt-icon">✦</div>
-                <label class="sr-only" for="promptInput">任务需求</label>
-                <textarea id="promptInput" maxlength="2000" rows="2" spellcheck="false">请使用默认规则清洗 MovieLens 1M，评估清洗前后的 Accurate、Complete、Unique、Up-to-date、Consistent 五个维度，并说明处理了哪些问题、还有哪些问题无法解决。</textarea>
-                <div class="prompt-actions">
-                    <span id="charCount">0/2000</span>
-                    <button id="startButton" class="primary-button"><span>▶</span>执行任务</button>
+            <section class="card task-composer" aria-labelledby="taskComposerTitle">
+                <div class="section-heading compact">
+                    <div><span class="eyebrow">ANALYSIS TASK</span><h2 id="taskComposerTitle">选择分析任务</h2></div>
+                    <span class="data-note">基于已登记的迭代一清洗数据</span>
                 </div>
+                <div class="task-kind-options" role="group" aria-label="任务类型">
+                    <button type="button" class="task-kind active" data-task-kind="classification" aria-pressed="true">高分分类</button>
+                    <button type="button" class="task-kind" data-task-kind="clustering" aria-pressed="false">用户聚类</button>
+                    <button type="button" class="task-kind" data-task-kind="reduction" aria-pressed="false">画像降维</button>
+                    <button type="button" class="task-kind" data-task-kind="governance" aria-pressed="false">数据治理</button>
+                </div>
+                <div class="task-fields" data-task-fields="classification">
+                    <label>用户 ID <input id="classificationUserId" type="number" min="1" step="1" placeholder="例如 31"></label>
+                    <label>电影 ID <input id="classificationMovieId" type="number" min="1" step="1" placeholder="例如 1"></label>
+                    <label>分类算法 <select id="classificationAlgorithm"><option value="both">两种算法对照</option><option value="logistic_regression">逻辑回归</option><option value="decision_tree">决策树</option></select></label>
+                </div>
+                <div class="task-fields hidden" data-task-fields="clustering">
+                    <label>用户 ID，多个用逗号分隔 <input id="clusteringUserIds" type="text" placeholder="例如 31,32"></label>
+                    <label>群体数 <input id="clusteringCount" type="number" min="2" max="20" step="1" value="5"></label>
+                    <label>聚类算法 <select id="clusteringAlgorithm"><option value="both">两种算法对照</option><option value="kmeans">K-means</option><option value="gmm">高斯混合模型</option></select></label>
+                </div>
+                <div class="task-fields hidden" data-task-fields="reduction">
+                    <label>用户 ID，多个用逗号分隔 <input id="reductionUserIds" type="text" placeholder="例如 31,32"></label>
+                    <label>降维算法 <select id="reductionAlgorithm"><option value="both">两种算法对照</option><option value="pca">PCA</option><option value="nmf">NMF</option></select></label>
+                    <label>降维目标 <select id="reductionTarget"><option value="dimension">目标维数</option><option value="retention">信息保留阈值</option></select></label>
+                    <label id="dimensionField">目标维数 <input id="reductionDimension" type="number" min="1" max="8" step="1" value="2"></label>
+                    <label id="retentionField" class="hidden">信息保留阈值 <input id="reductionRetention" type="number" min="0.01" max="1" step="0.01" value="0.8"></label>
+                    <label>对照聚类算法 <select id="reductionClusterAlgorithm"><option value="both">K-means 与 GMM</option><option value="kmeans">K-means</option><option value="gmm">高斯混合模型</option></select></label>
+                    <label>群体数 <input id="reductionClusterCount" type="number" min="2" max="20" step="1" value="5"></label>
+                </div>
+                <div class="prompt-card">
+                    <div class="prompt-icon">✦</div>
+                    <label class="sr-only" for="promptInput">补充问题</label>
+                    <textarea id="promptInput" maxlength="1200" rows="2" spellcheck="false" placeholder="补充你希望 Agent 解释的问题（可选）"></textarea>
+                    <div class="prompt-actions">
+                        <span id="charCount">0/1200</span>
+                        <button id="startButton" class="primary-button"><span>▶</span>执行任务</button>
+                    </div>
+                </div>
+                <p id="taskComposerHint" class="task-composer-hint">输入 UserID 和 MovieID；未指定算法时会比较逻辑回归与决策树。</p>
             </section>
 
             <section class="card progress-card" aria-live="polite">
@@ -106,8 +138,13 @@
             </div>
 
             <section id="resultEmpty" class="card result-empty">
-                <span>▤</span><h2>暂无可用结果</h2><p>任务完成后，质量指标和报告将在这里显示。</p>
+                <span>▤</span><h2>暂无可用结果</h2><p>任务完成后，分析结果和报告将在这里显示。</p>
                 <button id="backToAgentButton" class="secondary-button">返回工作台</button>
+            </section>
+
+            <section id="resultFailure" class="card result-failure hidden" role="alert">
+                <h2>任务未完成</h2><p id="resultFailureReason"></p>
+                <button id="failureBackButton" class="secondary-button">返回工作台查看执行记录</button>
             </section>
 
             <div id="resultContent" class="hidden">
@@ -171,14 +208,31 @@
                     </section>
                 </section>
             </div>
+            <div id="mlResultContent" class="hidden">
+                <section class="card result-summary-card">
+                    <div class="summary-mark">✦</div>
+                    <div><span class="eyebrow">ITERATION 2</span><h2>机器学习分析结果</h2>
+                        <p id="mlResultSummary" class="ml-summary">—</p>
+                        <button id="toggleMlSummary" type="button" class="secondary-button small hidden" aria-expanded="false">展开完整解释</button></div>
+                </section>
+                <section class="card ml-results-card">
+                    <div class="section-heading"><div><span class="eyebrow">EVIDENCE</span><h2>算法与评价</h2></div></div>
+                    <p id="mlProvenance" class="data-note"></p>
+                    <div id="mlResultCards" class="ml-result-cards"></div>
+                    <div class="report-actions">
+                        <button id="viewMlReportButton" class="secondary-button">查看完整 JSON</button>
+                        <button id="downloadMlReportButton" class="primary-button small">下载报告</button>
+                    </div>
+                </section>
+            </div>
         </section>
 
-        <footer>MovieLens 数据分析 Agent · Iteration 1 · Hadoop-backed evidence</footer>
+        <footer>MovieLens 数据分析 Agent · Hadoop-backed evidence</footer>
     </main>
 </div>
 
 <dialog id="reportDialog">
-    <div class="dialog-heading"><h2>五维质量评估报告</h2><button id="closeDialog" aria-label="关闭">×</button></div>
+    <div class="dialog-heading"><h2>任务报告</h2><button id="closeDialog" aria-label="关闭">×</button></div>
     <pre id="reportJson"></pre>
 </dialog>
 

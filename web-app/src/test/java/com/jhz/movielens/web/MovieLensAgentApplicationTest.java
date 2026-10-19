@@ -4,6 +4,7 @@ import com.jhz.movielens.agent.llm.LlmClient;
 import com.jhz.movielens.agent.llm.TextLlmClient;
 import com.jhz.movielens.agent.tool.ToolRegistry;
 import com.jhz.movielens.web.agent.HadoopGovernanceTool;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jhz.movielens.web.task.TaskSnapshot;
 import com.jhz.movielens.web.task.TaskStatus;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -35,6 +37,13 @@ class MovieLensAgentApplicationTest {
     @Test
     void buildsAgentFromDynamicallyDiscoveredTools() {
         assertTrue(toolRegistry.find(HadoopGovernanceTool.TOOL_NAME).isPresent());
+        for (String algorithmTool : List.of("predict_high_rating_lr", "predict_high_rating_tree",
+                "cluster_users_kmeans", "cluster_users_gmm",
+                "reduce_user_profiles_pca", "reduce_user_profiles_nmf")) {
+            var tool = toolRegistry.find(algorithmTool).orElseThrow();
+            var result = tool.execute(JsonNodeFactory.instance.objectNode().put("dataVersion", "unknown"));
+            assertEquals("UNREGISTERED_CLEAN_VERSION", result.code());
+        }
         assertNotNull(llmClient);
         assertNotNull(textLlmClient);
     }

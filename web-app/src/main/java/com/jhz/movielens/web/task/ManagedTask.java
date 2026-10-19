@@ -18,6 +18,12 @@ final class ManagedTask {
             new StepDefinition("QUALITY_SCORING", "五维评分"),
             new StepDefinition("AGENT_SUMMARIZING", "结果解释"),
             new StepDefinition("COMPLETED", "完成"));
+    private static final List<StepDefinition> ML_STEPS = List.of(
+            new StepDefinition("AGENT_PLANNING", "理解请求"),
+            new StepDefinition("ML_PREP", "核对清洗数据"),
+            new StepDefinition("ML_EXEC", "算法计算"),
+            new StepDefinition("AGENT_SUMMARIZING", "结果解释"),
+            new StepDefinition("COMPLETED", "完成"));
     private final String taskId;
     private final String prompt;
     private final String inputVersion;
@@ -114,10 +120,11 @@ final class ManagedTask {
     }
 
     private List<TaskStepSnapshot> buildSteps() {
+        List<StepDefinition> definitions = isMlTask() ? ML_STEPS : WORKFLOW_STEPS;
         int current = currentStepIndex();
-        List<TaskStepSnapshot> resultSteps = new ArrayList<>(WORKFLOW_STEPS.size());
-        for (int index = 0; index < WORKFLOW_STEPS.size(); index++) {
-            StepDefinition definition = WORKFLOW_STEPS.get(index);
+        List<TaskStepSnapshot> resultSteps = new ArrayList<>(definitions.size());
+        for (int index = 0; index < definitions.size(); index++) {
+            StepDefinition definition = definitions.get(index);
             TaskStepSnapshot.Status stepStatus;
             if (status == TaskStatus.SUCCEEDED) {
                 stepStatus = TaskStepSnapshot.Status.DONE;
@@ -136,6 +143,16 @@ final class ManagedTask {
     }
 
     private int currentStepIndex() {
+        if (isMlTask()) {
+            return switch (stageCode) {
+                case "ML_PREP" -> 1;
+                case "ML_EXEC" -> 2;
+                case "TOOL_COMPLETED", "AGENT_SUMMARIZING" -> 3;
+                case "COMPLETED" -> 4;
+                case "TOOL_FAILED", "FAILED" -> progress >= 85 ? 3 : progress >= 35 ? 2 : 1;
+                default -> 0;
+            };
+        }
         return switch (stageCode) {
             case "RAW_QUALITY_SCAN" -> 1;
             case "RELATIONAL_CHECK" -> 2;
@@ -148,6 +165,10 @@ final class ManagedTask {
             case "FAILED" -> Math.max(0, completedStageFromProgress());
             default -> 0;
         };
+    }
+
+    private boolean isMlTask() {
+        return !selectedTool.isBlank() && !selectedTool.equals("run_full_governance");
     }
 
     private int completedStageFromProgress() {

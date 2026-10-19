@@ -27,7 +27,12 @@ public class TaskController {
 
     @PostMapping
     public ResponseEntity<TaskSnapshot> create(@Valid @RequestBody CreateTaskRequest request) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(taskService.submit(request.prompt().trim()));
+        try {
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(taskService.submit(request.prompt().trim(), request.requestedTools()));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
     }
 
     @GetMapping("/{taskId}")

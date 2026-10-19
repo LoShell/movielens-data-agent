@@ -9,6 +9,11 @@ import com.jhz.movielens.agent.tool.Tool;
 import com.jhz.movielens.agent.tool.ToolExecutionContext;
 import com.jhz.movielens.agent.tool.ToolRegistry;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public final class AgentLoop {
     private final LlmClient llmClient;
     private final ToolRegistry toolRegistry;
@@ -38,6 +43,9 @@ public final class AgentLoop {
             throw new IllegalArgumentException("context must not be null");
         }
 
+        String requested = context.getAttributes().getOrDefault("requestedTools", "");
+        Set<String> requiredTools = requested.isBlank() ? Set.of()
+                : Arrays.stream(requested.split(",")).collect(Collectors.toCollection(LinkedHashSet::new));
         for (int step = 1; step <= maxSteps; step++) {
             emit(new AgentEvent(AgentEvent.Type.PLAN,
                     step == 1 ? "AGENT_PLANNING" : "AGENT_SUMMARIZING",
@@ -59,6 +67,22 @@ public final class AgentLoop {
             context.addAssistantMessage(formatAssistantMessage(step, response));
 
             if (response.isTerminal()) {
+                if (response.getType() == com.jhz.movielens.agent.protocol.AgentResponseType.DONE
+                        && !requiredTools.isEmpty()) {
+                    Set<String> completed = context.getToolObservations().stream()
+                            .filter(observation -> observation.result().success())
+                            .map(ToolObservation::toolName).collect(Collectors.toSet());
+                    Set<String> missing = new LinkedHashSet<>(requiredTools);
+                    missing.removeAll(completed);
+                    if (!missing.isEmpty()) {
+                        String message = "Requested tools still missing: " + String.join(", ", missing);
+                        context.addToolObservation("tool-policy",
+                                ToolResult.failure("INCOMPLETE_REQUESTED_TOOLS", message));
+                        emit(new AgentEvent(AgentEvent.Type.OBSERVATION, "AGENT_SUMMARIZING",
+                                message, "", 94));
+                        continue;
+                    }
+                }
                 AgentEvent.Type eventType = response.getType() == com.jhz.movielens.agent.protocol.AgentResponseType.DONE
                         ? AgentEvent.Type.FINAL : AgentEvent.Type.ERROR;
                 emit(new AgentEvent(eventType,
@@ -72,7 +96,7 @@ public final class AgentLoop {
                 String toolName = response.getToolCall() == null ? "" : response.getToolCall().getTool();
                 emit(new AgentEvent(AgentEvent.Type.ACTION, "TOOL_SELECTED",
                         response.getMessage(), toolName, 7));
-                executeToolCall(context, response.getToolCall());
+                executeToolCall(context, response.getToolCall(), requiredTools);
                 continue;
             }
 
@@ -82,15 +106,18 @@ public final class AgentLoop {
         return AgentResponse.failed("Agent reached the maximum number of steps: " + maxSteps);
     }
 
-    private void executeToolCall(AgentContext context, ToolCall call) {
+    private void executeToolCall(AgentContext context, ToolCall call, Set<String> requiredTools) {
         if (call == null || call.getTool() == null || call.getTool().isBlank()) {
             context.addToolObservation("unknown", ToolResult.failure("INVALID_TOOL_CALL", "Missing tool name."));
             return;
         }
 
-        ToolResult result = toolRegistry.find(call.getTool())
-                .map(tool -> executeTool(tool, call))
-                .orElseGet(() -> ToolResult.failure("UNKNOWN_TOOL", "Unknown tool: " + call.getTool()));
+        ToolResult result = !requiredTools.isEmpty() && !requiredTools.contains(call.getTool())
+                ? ToolResult.failure("TOOL_NOT_REQUESTED", "Only requested tools may run: "
+                        + String.join(", ", requiredTools))
+                : toolRegistry.find(call.getTool())
+                        .map(tool -> executeTool(tool, call))
+                        .orElseGet(() -> ToolResult.failure("UNKNOWN_TOOL", "Unknown tool: " + call.getTool()));
         context.addToolObservation(call.getTool(), result);
         emit(new AgentEvent(AgentEvent.Type.OBSERVATION,
                 result.success() ? "TOOL_COMPLETED" : "TOOL_FAILED",

@@ -1,0 +1,396 @@
+{
+  "status": "SUCCEEDED",
+  "experimentVersion": "iteration2-v1",
+  "generatedAt": "2026-10-18T09:03:38.305142+00:00",
+  "provenance": {
+    "dataVersion": "clean-agent-20260929-124232-bfc440f2",
+    "governanceTaskId": "agent-20260929-124232-bfc440f2",
+    "rulesVersion": "quality-rules-v1",
+    "T1": 1009843200,
+    "T2": 1041379200,
+    "rowCounts": {
+      "users": 5895,
+      "movies": 3662,
+      "ratings": 894993
+    },
+    "sha256": {
+      "ratings": "bdb016d740a45caeac9d86c9e2647dbbe98ace2031fd94314315f2d96c7e8f7e",
+      "users": "b42bf7dccad6c5b7d03b78532aa3ee6fa961ca4183502dc184a478827c9ec38c",
+      "movies": "f367b8fe6a5126777d81b44566650111e28dd36af028bf9f6fe843997e8e083e"
+    }
+  },
+  "splitCounts": {
+    "train": 870609,
+    "validation": 21347,
+    "test": 3037
+  },
+  "classification": {
+    "featureVersion": "event-history-v1",
+    "historyPolicy": "train strictly earlier; validation/test frozen at T1",
+    "models": {
+      "logistic_regression": {
+        "modelVersion": "7b8c181d53e209a1",
+        "selectedParameters": "C=0.1",
+        "validation": {
+          "count": 21347,
+          "positiveRate": 0.5270998266735373,
+          "threshold": 0.42499999999999993,
+          "F1": 0.706008658008658,
+          "ROC_AUC": 0.6936951300012131,
+          "precision": 0.5783918742552346,
+          "recall": 0.9058833985069321,
+          "confusionMatrix": [
+            [
+              2665,
+              7430
+            ],
+            [
+              1059,
+              10193
+            ]
+          ]
+        },
+        "test": {
+          "count": 3037,
+          "positiveRate": 0.5627263747118867,
+          "threshold": 0.42499999999999993,
+          "F1": 0.7371375116931712,
+          "ROC_AUC": 0.7112209810570544,
+          "precision": 0.6139462407479548,
+          "recall": 0.9221767115272089,
+          "confusionMatrix": [
+            [
+              337,
+              991
+            ],
+            [
+              133,
+              1576
+            ]
+          ]
+        },
+        "trials": [
+          {
+            "parameters": "C=0.1",
+            "trainingSeconds": 13.18578323199472,
+            "validation": {
+              "count": 21347,
+              "positiveRate": 0.5270998266735373,
+              "threshold": 0.42499999999999993,
+              "F1": 0.706008658008658,
+              "ROC_AUC": 0.6936951300012131,
+              "precision": 0.5783918742552346,
+              "recall": 0.9058833985069321,
+              "confusionMatrix": [
+                [
+                  2665,
+                  7430
+                ],
+                [
+                  1059,
+                  10193
+                ]
+              ]
+            }
+          },
+          {
+            "parameters": "C=1.0",
+            "trainingSeconds": 4.457592364997254,
+            "validation": {
+              "count": 21347,
+              "positiveRate": 0.5270998266735373,
+              "threshold": 0.42499999999999993,
+              "F1": 0.706008658008658,
+              "ROC_AUC": 0.6936949099093628,
+              "precision": 0.5783918742552346,
+              "recall": 0.9058833985069321,
+              "confusionMatrix": [
+                [
+                  2665,
+                  7430
+                ],
+                [
+                  1059,
+                  10193
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "decision_tree": {
+        "modelVersion": "ce2a89ef9bacd378",
+        "selectedParameters": "depth=8,leaf=100",
+        "validation": {
+          "count": 21347,
+          "positiveRate": 0.5270998266735373,
+          "threshold": 0.42499999999999993,
+          "F1": 0.7122345803842265,
+          "ROC_AUC": 0.6894050644367313,
+          "precision": 0.5736779237702248,
+          "recall": 0.939033060789193,
+          "confusionMatrix": [
+            [
+              2243,
+              7852
+            ],
+            [
+              686,
+              10566
+            ]
+          ]
+        },
+        "test": {
+          "count": 3037,
+          "positiveRate": 0.5627263747118867,
+          "threshold": 0.42499999999999993,
+          "F1": 0.7413598373616445,
+          "ROC_AUC": 0.7048946223748123,
+          "precision": 0.6037527593818984,
+          "recall": 0.9602106495026331,
+          "confusionMatrix": [
+            [
+              251,
+              1077
+            ],
+            [
+              68,
+              1641
+            ]
+          ]
+        },
+        "trials": [
+          {
+            "parameters": "depth=8,leaf=100",
+            "trainingSeconds": 17.20716047899623,
+            "validation": {
+              "count": 21347,
+              "positiveRate": 0.5270998266735373,
+              "threshold": 0.42499999999999993,
+              "F1": 0.7122345803842265,
+              "ROC_AUC": 0.6894050644367313,
+              "precision": 0.5736779237702248,
+              "recall": 0.939033060789193,
+              "confusionMatrix": [
+                [
+                  2243,
+                  7852
+                ],
+                [
+                  686,
+                  10566
+                ]
+              ]
+            }
+          },
+          {
+            "parameters": "depth=12,leaf=100",
+            "trainingSeconds": 20.40161846698902,
+            "validation": {
+              "count": 21347,
+              "positiveRate": 0.5270998266735373,
+              "threshold": 0.44999999999999996,
+              "F1": 0.7120824449182658,
+              "ROC_AUC": 0.6929505328599774,
+              "precision": 0.5932614874467077,
+              "recall": 0.8904194809811589,
+              "confusionMatrix": [
+                [
+                  3226,
+                  6869
+                ],
+                [
+                  1233,
+                  10019
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "profiles": {
+    "profileVersion": "user-genre-v1",
+    "userCount": 5793,
+    "genreCount": 18,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation",
+      "Children's",
+      "Comedy",
+      "Crime",
+      "Documentary",
+      "Drama",
+      "Fantasy",
+      "Film-Noir",
+      "Horror",
+      "Musical",
+      "Mystery",
+      "Romance",
+      "Sci-Fi",
+      "Thriller",
+      "War",
+      "Western"
+    ],
+    "profileDefinition": "per-genre training high-rating share with Beta(1,1) smoothing",
+    "clusterCountRequested": 5,
+    "dimensionalityReduction": {
+      "pca": {
+        "modelVersion": "016df1c1b8568240",
+        "dimensions": 8,
+        "informationRetention": 0.8002903461456299,
+        "parameters": {
+          "components": 8,
+          "randomSeed": 42
+        },
+        "retentionDefinition": "explained variance",
+        "fitSeconds": 0.012654877005843446,
+        "coordinateBytes": 185376
+      },
+      "nmf": {
+        "modelVersion": "a8f09979237875a6",
+        "dimensions": 8,
+        "informationRetention": 0.9830371141433716,
+        "parameters": {
+          "components": 8,
+          "initialization": "nndsvda",
+          "maxIterations": 5000,
+          "actualIterations": 703,
+          "randomSeed": 42
+        },
+        "retentionDefinition": "1 - squared relative reconstruction error",
+        "fitSeconds": 1.571523648002767,
+        "coordinateBytes": 185376
+      }
+    },
+    "clustering": {
+      "kmeans": {
+        "original": {
+          "algorithm": "kmeans",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "nInit": 10,
+            "randomSeed": 42
+          },
+          "sizes": [
+            1550,
+            1303,
+            1175,
+            527,
+            1238
+          ],
+          "silhouetteSample1000": 0.09984108805656433,
+          "fitSeconds": 1.6843090519978432,
+          "modelVersion": "079bd75041726130"
+        },
+        "pca": {
+          "algorithm": "kmeans",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "nInit": 10,
+            "randomSeed": 42
+          },
+          "sizes": [
+            1304,
+            537,
+            1231,
+            1169,
+            1552
+          ],
+          "silhouetteSample1000": 0.13936959207057953,
+          "fitSeconds": 1.6099220320029417,
+          "modelVersion": "6cc88918d4cb1cf7",
+          "ARIvsOriginal": 0.9797112923105334
+        },
+        "nmf": {
+          "algorithm": "kmeans",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "nInit": 10,
+            "randomSeed": 42
+          },
+          "sizes": [
+            1132,
+            1181,
+            1275,
+            1012,
+            1193
+          ],
+          "silhouetteSample1000": 0.13881441950798035,
+          "fitSeconds": 1.9827426520059817,
+          "modelVersion": "ef79f0ba2ceb6790",
+          "ARIvsOriginal": 0.23946353108904578
+        }
+      },
+      "gmm": {
+        "original": {
+          "algorithm": "gmm",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "covarianceType": "diag",
+            "regularization": 1e-05,
+            "randomSeed": 42
+          },
+          "sizes": [
+            2636,
+            279,
+            1196,
+            907,
+            775
+          ],
+          "silhouetteSample1000": 0.055265847593545914,
+          "fitSeconds": 0.8591511510021519,
+          "modelVersion": "0128dc99d922e8b3"
+        },
+        "pca": {
+          "algorithm": "gmm",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "covarianceType": "diag",
+            "regularization": 1e-05,
+            "randomSeed": 42
+          },
+          "sizes": [
+            1461,
+            1162,
+            391,
+            921,
+            1858
+          ],
+          "silhouetteSample1000": 0.13763342797756195,
+          "fitSeconds": 0.24824987800093368,
+          "modelVersion": "9be39803ba041d37",
+          "ARIvsOriginal": 0.27586788819787766
+        },
+        "nmf": {
+          "algorithm": "gmm",
+          "clusterCount": 5,
+          "parameters": {
+            "requestedClusters": 5,
+            "covarianceType": "diag",
+            "regularization": 1e-05,
+            "randomSeed": 42
+          },
+          "sizes": [
+            1070,
+            774,
+            1503,
+            1081,
+            1365
+          ],
+          "silhouetteSample1000": 0.10407376289367676,
+          "fitSeconds": 0.2913034230004996,
+          "modelVersion": "753062ec6dd25788",
+          "ARIvsOriginal": 0.13429027283097084
+        }
+      }
+    }
+  }
+}

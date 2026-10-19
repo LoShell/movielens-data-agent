@@ -25,3 +25,7 @@ movielens:
     input-version: raw-v1
     rules-version: quality-rules-v1
     timeout: 20m
+  ml:
+    clean-version: clean-agent-20260929-124232-bfc440f2
+    python: ${MOVIELENS_ML_PYTHON:.venv-ml/bin/python}
+    timeout: 45m

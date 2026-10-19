@@ -22,6 +22,10 @@ application-local.yaml
 # Local datasets and generated data
 data/raw/
 data/processed/
+.venv/
+.venv-ml/
+__pycache__/
+*.pyc
 
 # Operating-system files
 .DS_Store

@@ -17,8 +17,22 @@ const defaultSteps = [
     ["COMPLETED", "完成"]
 ].map(([code, label]) => ({code, label, status: "PENDING"}));
 
+const mlDefaultSteps = [
+    ["AGENT_PLANNING", "理解请求"],
+    ["ML_PRECHECK", "核对版本"],
+    ["ML_EXECUTION", "调用算法"],
+    ["ML_REPORT", "整理结果"],
+    ["COMPLETED", "完成"]
+].map(([code, label]) => ({code, label, status: "PENDING"}));
+
+const cleanVersion = "clean-agent-20260929-124232-bfc440f2";
+const governancePrompt = "请使用默认规则清洗 MovieLens 1M，评估清洗前后的 Accurate、Complete、Unique、Up-to-date、Consistent 五个维度，并说明处理了哪些问题、还有哪些问题无法解决。";
+const taskNotes = {classification: "", clustering: "", reduction: "", governance: governancePrompt};
+let selectedTaskKind = "classification";
+
 const elements = {
     prompt: document.querySelector("#promptInput"),
+    taskHint: document.querySelector("#taskComposerHint"),
     charCount: document.querySelector("#charCount"),
     start: document.querySelector("#startButton"),
     badge: document.querySelector("#statusBadge"),
@@ -32,7 +46,14 @@ const elements = {
     lastUpdated: document.querySelector("#lastUpdated"),
     openResults: document.querySelector("#openResultsButton"),
     resultEmpty: document.querySelector("#resultEmpty"),
+    resultFailure: document.querySelector("#resultFailure"),
+    resultFailureReason: document.querySelector("#resultFailureReason"),
     resultContent: document.querySelector("#resultContent"),
+    mlResultContent: document.querySelector("#mlResultContent"),
+    mlResultSummary: document.querySelector("#mlResultSummary"),
+    toggleMlSummary: document.querySelector("#toggleMlSummary"),
+    mlProvenance: document.querySelector("#mlProvenance"),
+    mlResultCards: document.querySelector("#mlResultCards"),
     resultSummary: document.querySelector("#resultSummary"),
     agentMessage: document.querySelector("#agentMessage .agent-copy"),
     conversation: document.querySelector("#conversation"),
@@ -164,7 +185,133 @@ function setAgentMessage(text, markdown = false) {
 }
 
 function updateCharacterCount() {
-    elements.charCount.textContent = `${elements.prompt.value.length}/2000`;
+    elements.charCount.textContent = `${elements.prompt.value.length}/${elements.prompt.maxLength}`;
+}
+
+function selectTaskKind(kind) {
+    taskNotes[selectedTaskKind] = elements.prompt.value;
+    selectedTaskKind = kind;
+    document.querySelectorAll(".task-kind").forEach(button => {
+        const active = button.dataset.taskKind === kind;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll("[data-task-fields]").forEach(group => {
+        group.classList.toggle("hidden", group.dataset.taskFields !== kind);
+    });
+    elements.prompt.value = taskNotes[kind];
+    elements.prompt.placeholder = kind === "governance" ? "输入数据治理问题" : "补充你希望 Agent 解释的问题（可选）";
+    updateTaskHint();
+    updateCharacterCount();
+    if (!currentTask) renderSteps(kind === "governance" ? defaultSteps : mlDefaultSteps);
+}
+
+function updateTaskHint() {
+    if (selectedTaskKind === "governance") {
+        elements.taskHint.textContent = "迭代一数据清洗与五维质量评估。";
+        return;
+    }
+    const algorithm = document.querySelector(`#${selectedTaskKind}Algorithm`).value;
+    const names = {
+        classification: {logistic_regression: "逻辑回归", decision_tree: "决策树"},
+        clustering: {kmeans: "K-means", gmm: "高斯混合模型"},
+        reduction: {pca: "PCA", nmf: "NMF"}
+    };
+    const subject = {classification: "输入 UserID 和 MovieID", clustering: "输入一个或多个 UserID",
+        reduction: "输入用户集合和压缩目标"}[selectedTaskKind];
+    elements.taskHint.textContent = algorithm === "both"
+        ? `${subject}；本次将对照两种算法。`
+        : `${subject}；本次只调用 ${names[selectedTaskKind][algorithm]}。`;
+}
+
+function positiveInteger(id, label, maximum = Number.MAX_SAFE_INTEGER) {
+    const raw = document.querySelector(`#${id}`).value.trim();
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 1 || value > maximum) {
+        throw new Error(maximum === Number.MAX_SAFE_INTEGER
+            ? `${label}必须是正整数` : `${label}必须是 1 到 ${maximum} 的整数`);
+    }
+    return value;
+}
+
+function userIds(id) {
+    const raw = document.querySelector(`#${id}`).value.trim();
+    const values = raw.split(/[,，\s]+/).filter(Boolean);
+    if (!values.length || values.length > 100 || values.some(value => !/^\d+$/.test(value)
+            || !Number.isSafeInteger(Number(value)) || Number(value) < 1)) {
+        throw new Error("请输入 1 到 100 个有效 UserID，多个 ID 用逗号分隔");
+    }
+    return [...new Set(values.map(Number))];
+}
+
+function clusterCount(id) {
+    const count = positiveInteger(id, "群体数", 20);
+    if (count < 2) throw new Error("群体数必须在 2 到 20 之间");
+    return count;
+}
+
+function buildTaskPrompt() {
+    const question = elements.prompt.value.trim();
+    if (selectedTaskKind === "governance") {
+        if (!question) throw new Error("请输入数据治理问题");
+        return question;
+    }
+    const version = `使用已登记清洗版本 dataVersion=${cleanVersion}。`;
+    let instruction;
+    if (selectedTaskKind === "classification") {
+        const user = positiveInteger("classificationUserId", "UserID");
+        const movie = positiveInteger("classificationMovieId", "MovieID");
+        const algorithm = document.querySelector("#classificationAlgorithm").value;
+        const tools = algorithm === "both" ? "用户明确选择两种算法对照：分别调用 predict_high_rating_lr 和 predict_high_rating_tree 两个分类工具并比较"
+            : `只调用 ${algorithm === "logistic_regression" ? "predict_high_rating_lr" : "predict_high_rating_tree"} 分类工具`;
+        instruction = `对 UserID=${user} 与 MovieID=${movie} 预测评分是否不低于 4 分，${tools}。给出预测类别、正类概率、模型版本、实际参数、验证与测试指标，并标注训练期无历史的适用限制。`;
+    } else if (selectedTaskKind === "clustering") {
+        const ids = userIds("clusteringUserIds");
+        const count = clusterCount("clusteringCount");
+        const algorithm = document.querySelector("#clusteringAlgorithm").value;
+        const tools = algorithm === "both" ? "用户明确选择两种算法对照：分别调用 cluster_users_kmeans 和 cluster_users_gmm 两个聚类工具并比较"
+            : `只调用 ${algorithm === "kmeans" ? "cluster_users_kmeans" : "cluster_users_gmm"} 聚类工具`;
+        instruction = `分析 UserID 集合 [${ids.join(",")}]，参数 userIds=[${ids.join(",")}]、clusters=${count}；${tools}。给出每位用户的群体归属、群体摘要、版本、参数和评价指标，并说明历史不足情况。`;
+    } else {
+        const ids = userIds("reductionUserIds");
+        const count = clusterCount("reductionClusterCount");
+        const algorithm = document.querySelector("#reductionAlgorithm").value;
+        const tools = algorithm === "both" ? "用户明确选择两种算法对照：分别调用 reduce_user_profiles_pca 和 reduce_user_profiles_nmf 两个降维工具并比较"
+            : `只调用 ${algorithm === "pca" ? "reduce_user_profiles_pca" : "reduce_user_profiles_nmf"} 降维工具`;
+        const target = document.querySelector("#reductionTarget").value;
+        let targetText;
+        if (target === "dimension") {
+            targetText = `dimension=${positiveInteger("reductionDimension", "目标维数", 8)}`;
+        } else {
+            const raw = document.querySelector("#reductionRetention").value.trim();
+            const retention = Number(raw);
+            if (!raw || !Number.isFinite(retention) || retention <= 0 || retention > 1) {
+                throw new Error("信息保留阈值必须在 0 到 1 之间，且不能为 0");
+            }
+            targetText = `retention=${retention}`;
+        }
+        const clusterAlgorithm = document.querySelector("#reductionClusterAlgorithm").value;
+        const comparison = clusterAlgorithm === "both" ? "使用 K-means 和 GMM 分别对照原始与压缩画像"
+            : `使用 ${clusterAlgorithm === "kmeans" ? "K-means" : "GMM"} 对照原始与压缩画像，参数 clusterAlgorithm=${clusterAlgorithm}`;
+        instruction = `分析 UserID 集合 [${ids.join(",")}]，参数 userIds=[${ids.join(",")}]、${targetText}、clusters=${count}；${tools}。${comparison}。给出坐标、信息保留、资源开销、聚类指标与二维图。`;
+    }
+    const prompt = `${version}${instruction}${question ? ` 补充问题：${question}` : ""}`;
+    if (prompt.length > 2000) throw new Error("任务描述超过 2000 字，请减少用户 ID 或补充问题长度");
+    return prompt;
+}
+
+function toolsForSelection() {
+    if (selectedTaskKind === "governance") return ["run_full_governance"];
+    const choices = {
+        classification: {both: ["predict_high_rating_lr", "predict_high_rating_tree"],
+            logistic_regression: ["predict_high_rating_lr"], decision_tree: ["predict_high_rating_tree"]},
+        clustering: {both: ["cluster_users_kmeans", "cluster_users_gmm"],
+            kmeans: ["cluster_users_kmeans"], gmm: ["cluster_users_gmm"]},
+        reduction: {both: ["reduce_user_profiles_pca", "reduce_user_profiles_nmf"],
+            pca: ["reduce_user_profiles_pca"], nmf: ["reduce_user_profiles_nmf"]}
+    };
+    const selected = document.querySelector(`#${selectedTaskKind}Algorithm`).value;
+    return choices[selectedTaskKind][selected];
 }
 
 function switchView(view, updateHash = true) {
@@ -190,14 +337,18 @@ function selectConsoleTab(tab) {
 }
 
 function setMetadata(task) {
-    document.querySelector("#inputVersion").textContent = task?.inputVersion || "raw-v1";
-    document.querySelector("#outputVersion").textContent = task?.outputVersion || "—";
+    const result = task?.result?.toolResults?.[0]?.result || task?.result;
+    const cleanVersion = result?.provenance?.dataVersion;
+    const isMl = task?.selectedTool && task.selectedTool !== "run_full_governance";
+    document.querySelector("#inputVersion").textContent = cleanVersion || (isMl ? "核对清洗版本中" : task?.inputVersion || "raw-v1");
+    document.querySelector("#outputVersion").textContent = cleanVersion ? "分析报告" : (isMl ? "计算中" : task?.outputVersion || "—");
     document.querySelector("#rulesVersion").textContent = task?.rulesVersion || "quality-rules-v1";
     document.querySelector("#taskId").textContent = task?.taskId || "—";
 }
 
 function renderSteps(steps = defaultSteps) {
     elements.stepper.replaceChildren();
+    elements.stepper.style.setProperty("--step-count", String(steps.length));
     steps.forEach((step, index) => {
         const item = document.createElement("div");
         item.className = `step ${String(step.status || "PENDING").toLowerCase()}`;
@@ -237,7 +388,8 @@ function renderStatus(task) {
     elements.progressValue.textContent = `${progress}%`;
     elements.selectedTool.textContent = task?.selectedTool || "—";
     elements.lastUpdated.textContent = formatClock(task?.updatedAt);
-    renderSteps(task?.steps?.length ? task.steps : defaultSteps);
+    renderSteps(task?.steps?.length ? task.steps
+        : selectedTaskKind === "governance" ? defaultSteps : mlDefaultSteps);
     updateElapsed();
 }
 
@@ -287,16 +439,20 @@ function traceTitle(type, toolName) {
 }
 
 async function createTask() {
-    const prompt = elements.prompt.value.trim();
-    if (!prompt) return showToast("请输入任务需求");
+    let prompt;
+    try {
+        prompt = buildTaskPrompt();
+    } catch (error) {
+        return showToast(error.message);
+    }
     clearTimeout(pollTimer);
     resetTaskView();
-    renderStatus({status: "QUEUED", stage: "正在创建 Agent 任务", progress: 0, steps: defaultSteps});
+    renderStatus({status: "QUEUED", stage: "正在创建 Agent 任务", progress: 0});
     try {
         const response = await fetch("/api/tasks", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({prompt})
+            body: JSON.stringify({prompt, requestedTools: toolsForSelection()})
         });
         if (!response.ok) throw new Error(await errorMessage(response));
         currentTask = await response.json();
@@ -304,7 +460,7 @@ async function createTask() {
         renderTask(currentTask);
         schedulePoll();
     } catch (error) {
-        renderStatus({status: "FAILED", stage: "任务创建失败", progress: 0, steps: defaultSteps});
+        renderStatus({status: "FAILED", stage: "任务创建失败", progress: 0});
         setAgentMessage(`任务创建失败：${error.message}`);
         showToast(error.message);
     }
@@ -342,6 +498,11 @@ function renderTask(task) {
         setAgentMessage(task.stage || "Agent 正在处理任务。");
     } else if (task.status === "FAILED") {
         setAgentMessage(`任务失败：${task.error || "未知错误"}`);
+        elements.resultFailureReason.textContent = `${task.stage || "执行阶段未知"}：${task.error || "未知错误"}`;
+        elements.resultFailure.classList.remove("hidden");
+        elements.resultEmpty.classList.add("hidden");
+        elements.resultContent.classList.add("hidden");
+        elements.mlResultContent.classList.add("hidden");
         enableQuestions(false);
     } else if (task.status === "SUCCEEDED") {
         setAgentMessage(task.summary || "任务已完成，结果来自实际工具报告。", true);
@@ -351,7 +512,12 @@ function renderTask(task) {
 }
 
 function renderCompleted(task) {
+    elements.resultFailure.classList.add("hidden");
     const result = task.result || {};
+    if (result.kind || Array.isArray(result.toolResults)) {
+        renderMlCompleted(task);
+        return;
+    }
     const quality = result.quality;
     const cleaning = result.cleaning;
     if (!quality || !cleaning) {
@@ -370,6 +536,137 @@ function renderCompleted(task) {
     elements.reportJson.textContent = JSON.stringify(result, null, 2);
     elements.resultEmpty.classList.add("hidden");
     elements.resultContent.classList.remove("hidden");
+    elements.mlResultContent.classList.add("hidden");
+}
+
+function renderMlCompleted(task) {
+    const results = task.result.toolResults || [{toolName: task.selectedTool, result: task.result}];
+    const provenance = results[0]?.result?.provenance;
+    if (!provenance || !results.length) {
+        elements.resultEmpty.classList.remove("hidden");
+        showToast("机器学习报告缺少数据来源");
+        return;
+    }
+    elements.mlResultSummary.textContent = task.summary || "实际算法结果已生成。";
+    const longSummary = elements.mlResultSummary.textContent.length > 280;
+    elements.mlResultSummary.classList.toggle("collapsed", longSummary);
+    elements.toggleMlSummary.classList.toggle("hidden", !longSummary);
+    elements.toggleMlSummary.textContent = "展开完整解释";
+    elements.toggleMlSummary.setAttribute("aria-expanded", "false");
+    elements.mlProvenance.textContent = `清洗数据：${provenance.dataVersion} · 治理任务：${provenance.governanceTaskId} · T1：${formatDate(new Date(provenance.T1 * 1000).toISOString())} · T2：${formatDate(new Date(provenance.T2 * 1000).toISOString())}`;
+    elements.mlResultCards.replaceChildren();
+    results.forEach(({toolName, result}) => {
+        const card = document.createElement("article");
+        card.className = "ml-result-card";
+        const title = document.createElement("h3");
+        title.textContent = `${toolName || result.algorithm} · ${result.algorithm}`;
+        card.append(title);
+        const note = document.createElement("p");
+        note.className = "result-kind-note";
+        note.textContent = ({classification: "预测结果 · 验证与测试指标用于说明模型表现",
+            clustering: "训练期用户画像的统计分组",
+            reduction: "训练期画像的探索性压缩与分组对照"})[result.kind] || "实际分析结果";
+        card.append(note);
+        const line = (label, value) => {
+            const paragraph = document.createElement("p");
+            paragraph.textContent = `${label}：${value ?? "未提供"}`;
+            card.append(paragraph);
+        };
+        const number = value => typeof value === "number" ? value.toFixed(4) : "未提供";
+        line("证据路径", result.queryReportPath);
+        if (result.kind === "classification") {
+            line("模型版本", result.evaluation?.modelVersion);
+            line("参数", result.evaluation?.selectedParameters);
+            line("训练 / 验证 / 测试样本", `${result.splitCounts?.train ?? "—"} / ${result.splitCounts?.validation ?? "—"} / ${result.splitCounts?.test ?? "—"}`);
+            line("验证集 F1 / ROC-AUC", `${number(result.evaluation?.validation?.F1)} / ${number(result.evaluation?.validation?.ROC_AUC)}`);
+            line("测试集 F1 / ROC-AUC", `${number(result.evaluation?.test?.F1)} / ${number(result.evaluation?.test?.ROC_AUC)}`);
+            line("阈值", number(result.evaluation?.validation?.threshold));
+            if (result.prediction) {
+                line("预测对象", `用户 ${result.prediction.userId} / 电影 ${result.prediction.movieId}`);
+                line("高分概率估计", number(result.prediction.estimatedHighRatingProbability));
+                line("预测类别", result.prediction.predictedHighRating ? "高分" : "非高分");
+                const coldStart = [result.prediction.coldStartUser && "用户",
+                    result.prediction.coldStartMovie && "电影"].filter(Boolean);
+                if (coldStart.length) line("适用限制", `${coldStart.join("和")}在训练期没有评分历史，预测依赖默认历史特征`);
+            }
+        } else if (result.kind === "clustering") {
+            line("结果版本", result.resultVersion);
+            line("目标群数", result.parameters?.clusters);
+            line("配置", JSON.stringify(result.results?.original?.parameters || {}));
+            (result.userAssignments || []).forEach(user => {
+                line(`用户 ${user.userId} 的群体`, `${user.group}${user.historyInsufficient ? " · 训练期历史不足" : ""}`);
+                line(`用户 ${user.userId} 训练期评分数`, user.historyCount);
+            });
+            (result.groupSummaries || []).forEach(group =>
+                line(`群体 ${group.group} · ${group.size} 人`, `偏好类型：${(group.topGenres || []).join("、")}；代表用户：${group.representativeUserId}`));
+            Object.entries(result.results || {}).forEach(([space, metrics]) => {
+                line(`${space} 轮廓系数`, number(metrics.silhouetteSample1000));
+                if (space !== "original") line(`${space} 与原画像分组 ARI`, number(metrics.ARIvsOriginal));
+                line(`${space} 群体规模`, (metrics.sizes || []).join(" / "));
+            });
+        } else if (result.kind === "reduction") {
+            line("模型 / 结果版本", `${result.modelVersion} / ${result.resultVersion}`);
+            line("原始画像维度", result.originalDimensions);
+            line("压缩后维度", result.reduction?.dimensions);
+            const retentionLabel = result.algorithm === "pca" ? "解释方差比例"
+                : result.algorithm === "nmf" ? "按重建误差计算的信息保留" : "信息保留";
+            line(retentionLabel, number(result.reduction?.informationRetention));
+            line("训练模型拟合秒数", number(result.reduction?.fitSeconds));
+            line("坐标存储字节数", result.reduction?.coordinateBytes);
+            line("模型参数", JSON.stringify(result.reduction?.modelParameters || {}));
+            if (result.reduction?.fitStrategy) {
+                line("分量说明", `训练期模型拟合 ${result.reduction?.modelParameters?.components ?? "—"} 个分量；本次取前 ${result.reduction?.dimensions ?? "—"} 维`);
+            }
+            (result.componentDirections || []).forEach(direction =>
+                line(`方向 ${direction.component}`, `${(direction.strongestGenres || []).join("、")}${direction.oppositeGenres ? ` ↔ ${direction.oppositeGenres.join("、")}` : ""}`));
+            (result.coordinates || []).forEach(point =>
+                line(`用户 ${point.userId} 坐标`, (point.values || []).map(number).join("，")));
+            Object.entries(result.clusteringComparison || {}).forEach(([method, metrics]) => {
+                line(`${method} 原始 / 压缩轮廓系数`, `${number(metrics.original?.silhouetteSample1000)} / ${number(metrics.reduced?.silhouetteSample1000)}`);
+                line(`${method} 群体 ARI`, number(metrics.reduced?.ARIvsOriginal));
+            });
+            line("二维图说明", result.plotDefinition?.startsWith("First two fitted components")
+                ? "展示前两个拟合分量；背景用户最多抽样 80 人，所选用户另行标出。"
+                : result.plotDefinition);
+            if (result.plotPoints?.length) card.append(renderMlScatter(result.plotPoints));
+        }
+        elements.mlResultCards.append(card);
+    });
+    if (results.length === 1 && results[0].result?.queryReportPath) {
+        elements.mlProvenance.textContent += ` · 查询报告：${results[0].result.queryReportPath}`;
+    }
+    elements.reportJson.textContent = JSON.stringify(task.result, null, 2);
+    elements.resultEmpty.classList.add("hidden");
+    elements.resultContent.classList.add("hidden");
+    elements.mlResultContent.classList.remove("hidden");
+}
+
+function renderMlScatter(points) {
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("viewBox", "0 0 320 220");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "用户画像降维二维散点图；颜色表示压缩后群体，描边表示目标用户");
+    svg.style.width = "100%";
+    svg.style.marginTop = "10px";
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const palette = ["#2864d9", "#e07b33", "#23a081", "#9c59c8", "#e04f6a", "#8c9b24"];
+    points.forEach(point => {
+        const circle = document.createElementNS(svgNs, "circle");
+        circle.setAttribute("cx", String(16 + 288 * (point.x - minX) / Math.max(maxX - minX, 1e-9)));
+        circle.setAttribute("cy", String(204 - 188 * (point.y - minY) / Math.max(maxY - minY, 1e-9)));
+        circle.setAttribute("r", point.selected ? "5" : "2.6");
+        circle.setAttribute("fill", palette[point.group % palette.length]);
+        if (point.selected) circle.setAttribute("stroke", "#172944");
+        const title = document.createElementNS(svgNs, "title");
+        title.textContent = `用户 ${point.userId} · 群体 ${point.group}`;
+        circle.append(title);
+        svg.append(circle);
+    });
+    return svg;
 }
 
 function renderScoreChart(quality) {
@@ -468,7 +765,9 @@ function renderLimitations(limitations) {
 
 function resetTaskView() {
     elements.resultEmpty.classList.remove("hidden");
+    elements.resultFailure.classList.add("hidden");
     elements.resultContent.classList.add("hidden");
+    elements.mlResultContent.classList.add("hidden");
     elements.conversation.replaceChildren();
     renderTrace([]);
     enableQuestions(false);
@@ -524,7 +823,7 @@ function downloadReport() {
     const blob = new Blob([JSON.stringify(currentTask.result, null, 2)], {type: "application/json"});
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${currentTask.taskId}-quality-report.json`;
+    link.download = `${currentTask.taskId}-report.json`;
     link.click();
     URL.revokeObjectURL(link.href);
 }
@@ -546,6 +845,17 @@ function showToast(message) {
 
 elements.prompt.addEventListener("input", updateCharacterCount);
 elements.start.addEventListener("click", createTask);
+document.querySelectorAll(".task-kind").forEach(button => button.addEventListener("click", () => {
+    selectTaskKind(button.dataset.taskKind);
+}));
+for (const id of ["classificationAlgorithm", "clusteringAlgorithm", "reductionAlgorithm"]) {
+    document.querySelector(`#${id}`).addEventListener("change", updateTaskHint);
+}
+document.querySelector("#reductionTarget").addEventListener("change", event => {
+    const retention = event.target.value === "retention";
+    document.querySelector("#dimensionField").classList.toggle("hidden", retention);
+    document.querySelector("#retentionField").classList.toggle("hidden", !retention);
+});
 document.querySelector("#questionForm").addEventListener("submit", askQuestion);
 document.querySelectorAll(".nav-item[data-view]").forEach(item => item.addEventListener("click", event => {
     event.preventDefault();
@@ -555,16 +865,29 @@ document.querySelectorAll(".console-tab").forEach(button => button.addEventListe
     selectConsoleTab(button.dataset.consoleTab);
 }));
 elements.openResults.addEventListener("click", () => switchView("results"));
+elements.toggleMlSummary.addEventListener("click", () => {
+    const expanded = elements.toggleMlSummary.getAttribute("aria-expanded") !== "true";
+    elements.toggleMlSummary.setAttribute("aria-expanded", String(expanded));
+    elements.toggleMlSummary.textContent = expanded ? "收起解释" : "展开完整解释";
+    elements.mlResultSummary.classList.toggle("collapsed", !expanded);
+});
 document.querySelector("#backToAgentButton").addEventListener("click", () => switchView("agent"));
+document.querySelector("#failureBackButton").addEventListener("click", () => switchView("agent"));
 document.querySelector("#viewReportButton").addEventListener("click", () => {
     if (!currentTask?.result) return showToast("暂无报告");
     elements.dialog.showModal();
 });
 document.querySelector("#downloadReportButton").addEventListener("click", downloadReport);
+document.querySelector("#downloadMlReportButton").addEventListener("click", downloadReport);
+document.querySelector("#viewMlReportButton").addEventListener("click", () => {
+    if (!currentTask?.result) return showToast("暂无报告");
+    elements.dialog.showModal();
+});
 document.querySelector("#closeDialog").addEventListener("click", () => elements.dialog.close());
 window.addEventListener("hashchange", () => switchView(location.hash.slice(1), false));
 
 updateCharacterCount();
+updateTaskHint();
 renderSteps(defaultSteps);
 renderStatus(null);
 switchView(location.hash.slice(1), false);
