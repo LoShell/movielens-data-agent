@@ -6,7 +6,7 @@
 
 组名：Nutshell
 
-迭代一的 Hadoop 数据清洗与五维质量评估已有真实运行报告。迭代二已基于清洗版本 `clean-agent-20260929-124232-bfc440f2` 完成六种算法的真实训练、独立查询与分类、聚类、降维三类 Web 端到端联调，并将模型、画像、坐标、评价报告发布到 HDFS。实测结果与验收证据见 [迭代二验收记录](reports/iteration2/validation.md)。
+迭代一的 Hadoop 数据清洗与五维质量评估已有真实运行报告。迭代二已基于清洗版本 `clean-agent-20260929-124232-bfc440f2` 完成六种算法的真实训练、独立查询与分类、聚类、降维三类 Web 端到端联调，并将模型、画像、坐标、评价报告发布到 HDFS。实验过程与结果见 [迭代二实验报告](迭代二实验报告.md)，原始证据见 [迭代二验收记录](reports/iteration2/validation.md)。
 
 本次分类测试集包含 3037 条评分事件：逻辑回归 F1 为 0.7371、ROC-AUC 为 0.7112；决策树 F1 为 0.7414、ROC-AUC 为 0.7049。NMF 在 703 次迭代后收敛。完整配置、验证集指标、聚类和降维指标以 `/movielens/analysis/iteration2/clean-agent-20260929-124232-bfc440f2/experiment-report.json` 为准。
 
